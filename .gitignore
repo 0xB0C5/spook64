@@ -2,3 +2,4 @@ filesystem/
 build/
 .libdragon/
 libdragon/
+*.z64

@@ -26,9 +26,6 @@ int main()
     {
         render();
 
-        controller_scan();
-        // struct controller_data ckeys = get_keys_down();
-
         if (audio_can_write()) {    	
             short *buf = audio_write_begin();
             mixer_poll(buf, audio_get_buffer_length());
