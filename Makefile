@@ -31,7 +31,7 @@ filesystem/%.sprite: assets/%.png
 	@$(N64_MKSPRITE) $(MKSPRITE_FLAGS) -o filesystem "$<"
 
 filesystem/ground.sprite: MKSPRITE_FLAGS=--format RGBA16 --tiles 32,32
-filesystem/cube.sprite: MKSPRITE_FLAGS=--format RGBA16 --tiles 32,32
+filesystem/snooper.sprite: MKSPRITE_FLAGS=--format RGBA16 --tiles 32,32
 filesystem/light.sprite: MKSPRITE_FLAGS=--format RGBA32 --tiles 32,32
 
 $(BUILD_DIR)/spook64.dfs: $(assets_conv)

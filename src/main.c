@@ -1,6 +1,8 @@
 #include "libdragon.h"
 #include <malloc.h>
 #include "render.h"
+#include "_generated_models.h"
+#include "model_viewer.h"
 
 int main()
 {
@@ -21,6 +23,8 @@ int main()
     rdpq_debug_start();
 
 	renderer_init();
+
+	show_model_viewer(&snooper_model, "rom:/snooper.sprite");
 
     while (1)
     {

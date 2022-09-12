@@ -3,3 +3,4 @@ build/
 .libdragon/
 libdragon/
 *.z64
+src/_generated*

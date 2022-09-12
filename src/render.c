@@ -1,32 +1,15 @@
 #include "render.h"
 #include "libdragon.h"
 #include <math.h>
+#include "_generated_models.h"
 
 #define MAX_MODEL_VERTICES 256
-#define VERT_LEN 6
+#define VERT_LEN 9
 
 const float camera_z_factor = -0.04f;
 const float camera_w_factor = 0.16f;
 
-
-typedef struct {
-	uint16_t verts_len;
-	uint16_t tris_len;
-
-	float *verts;
-	uint16_t *tris;
-} model_t;
-
-typedef struct {
-	float x;
-	float y;
-	float z;
-
-	float rotation_z;
-} object_transform_t;
-
 float work_vertices[MAX_MODEL_VERTICES*VERT_LEN] = {};
-
 
 float cube_verts[] = {
 	-0.5f, -0.5f, -0.5f, 0.f, 32.f,
@@ -59,11 +42,9 @@ uint16_t cube_tris[] = {
 	5, 6, 7,
 };
 
-#define MODEL(verts, tris) {sizeof(verts)/sizeof(float),sizeof(tris)/sizeof(uint16_t),verts,tris}
-
 model_t cube_model = MODEL(cube_verts, cube_tris);
 
-object_transform_t cube_transform = {
+static object_transform_t test_transform = {
 	0.f,
 	0.f,
 	0.5f,
@@ -106,26 +87,31 @@ model_t light_model = MODEL(light_verts, light_tris);
 
 float camera_position[] = {0.f, -4.f, 8.f};
 
-float camera_xx;
-float camera_yy;
-float camera_yz;
-float camera_zy;
-float camera_zz;
+static float camera_xx;
+static float camera_yy;
+static float camera_yz;
+static float camera_zy;
+static float camera_zz;
+
+static float light_direction_x = -0.57735f;
+static float light_direction_y = -0.57735f;
+static float light_direction_z = 0.57735f;
+
+static float directional_light_r = 0.85f;
+static float directional_light_g = 0.65f;
+static float directional_light_b = 0.45f;
+
+static float ambient_light_r = 0.15f;
+static float ambient_light_g = 0.25f;
+static float ambient_light_b = 0.35f;
 
 static sprite_t *ground_sprite;
-static sprite_t *cube_sprite;
+static sprite_t *snooper_sprite;
 static sprite_t *light_sprite;
 
-static surface_t zbuffer;
+surface_t zbuffer;
 
-void renderer_init() {
-    ground_sprite = sprite_load("rom:/ground.sprite");
-	cube_sprite = sprite_load("rom:/cube.sprite");
-	light_sprite = sprite_load("rom:/light.sprite");
-	
-	zbuffer = surface_alloc(FMT_RGBA16, 320, 240);
-
-	float camera_pitch = 0.5f;
+void set_camera_pitch(float camera_pitch) {
 	float sp = sinf(camera_pitch);
 	float cp = cosf(camera_pitch);
 
@@ -134,6 +120,16 @@ void renderer_init() {
 	camera_yz = 100.f * sp;
 	camera_zy = -camera_z_factor * sp;
 	camera_zz = camera_z_factor * cp;
+}
+
+void renderer_init() {
+    ground_sprite = sprite_load("rom:/ground.sprite");
+	snooper_sprite = sprite_load("rom:/snooper.sprite");
+	light_sprite = sprite_load("rom:/light.sprite");
+
+	zbuffer = surface_alloc(FMT_RGBA16, 320, 240);
+
+	set_camera_pitch(0.5f);
 }
 
 void render_object(const object_transform_t *transform, const model_t *model) {
@@ -180,6 +176,24 @@ void render_object(const object_transform_t *transform, const model_t *model) {
 		*(out_v++) = *(in_v++);
 		*(out_v++) = *(in_v++);
 		*(out_v++) = out_w;
+
+		float norm_x = *(in_v++);
+		float norm_y = *(in_v++);
+		float norm_z = *(in_v++);
+
+		float brightness = (
+			  (light_direction_x * cos_yaw - light_direction_y * sin_yaw) * norm_x
+			+ (light_direction_x * sin_yaw + light_direction_y * cos_yaw) * norm_y
+			+ light_direction_z * norm_z
+		);
+		if (brightness < 0.0f) {
+			brightness = 0.0f;
+		}
+
+		// Skip normal/color for now.
+		*(out_v++) = ambient_light_r + brightness * directional_light_r;
+		*(out_v++) = ambient_light_g + brightness * directional_light_g;
+		*(out_v++) = ambient_light_b + brightness * directional_light_b;
 	}
 
 	uint16_t *tris_end = model->tris + model->tris_len;
@@ -192,7 +206,7 @@ void render_object(const object_transform_t *transform, const model_t *model) {
 			TILE0, // tile
 			0, // mipmaps
 			0, // pos_offset
-			-1, // shade_offset
+			6, // shade_offset
 			3, // tex_offset
 			2, // depth_offset
 			work_vertices+VERT_LEN*a,
@@ -202,25 +216,11 @@ void render_object(const object_transform_t *transform, const model_t *model) {
 	}
 }
 
-void render_model(uint16_t vertsSize, uint16_t trisSize, float *verts, uint16_t *tris) {
-	uint16_t triIdx = 0;
-	while (triIdx < trisSize) {
-		uint16_t a = tris[triIdx++];
-		uint16_t b = tris[triIdx++];
-		uint16_t c = tris[triIdx++];
-
-		rdpq_triangle(
-			TILE0, // tile
-			0, // mipmaps
-			0, // pos_offset
-			-1, // shade_offset
-			3, // tex_offset
-			2, // depth_offset
-			verts+VERT_LEN*a,
-			verts+VERT_LEN*b,
-			verts+VERT_LEN*c
-		);
-	}
+void clear_z_buffer() {
+    rdp_attach(&zbuffer);
+	rdpq_set_mode_fill(RGBA32(0xff, 0xff, 0xff, 0xff));
+	rdpq_fill_rectangle(0, 0, 320, 240);
+	rdp_detach();
 }
 
 void render() {
@@ -231,14 +231,12 @@ void render() {
     }
 
 	// Clear the z buffer.
-    rdp_attach(&zbuffer);
-	rdpq_set_mode_fill(RGBA32(0xff, 0xff, 0xff, 0xff));
-	rdpq_fill_rectangle(0, 0, 320, 240);
-	rdp_detach();
+	clear_z_buffer();
+
+    rdp_attach(disp);
+	rdpq_set_z_image(&zbuffer);
 
 	// Clear the framebuffer.
-	// TODO : use a skybox or something instead?
-    rdp_attach(disp);
 	rdpq_set_mode_fill(RGBA32(0, 0, 0, 0));
 	rdpq_fill_rectangle(0, 0, 320, 240);
 
@@ -246,8 +244,6 @@ void render() {
 	rdpq_set_other_modes_raw(SOM_TEXTURE_PERSP);
 	rdpq_change_other_modes_raw(SOM_SAMPLE_MASK, SOM_SAMPLE_BILINEAR);
 	// rdpq_change_other_modes_raw(SOM_AA_ENABLE, SOM_AA_ENABLE);
-
-	rdpq_set_z_image(&zbuffer);
 
 	rdpq_mode_combiner(RDPQ_COMBINER_TEX);
 
@@ -289,16 +285,15 @@ void render() {
 	floor_transform.x = 0.0f;
 	floor_transform.y = 0.0f;
 	floor_transform.z = 0.0f;
-	render_object(&floor_transform, &light_model);
-	render_object(&cube_transform, &light_model);
+	render_object(&test_transform, &light_model);
 
-	// Render cube
+	// Render snooper
 	rdpq_set_mode_standard();
 	rdpq_change_other_modes_raw(SOM_Z_WRITE, SOM_Z_WRITE);
 	rdpq_change_other_modes_raw(SOM_Z_COMPARE, SOM_Z_COMPARE);
 	rdpq_mode_blender(RDPQ_BLENDER((IN_RGB, IN_ALPHA, MEMORY_RGB, ZERO)));
-	rdp_load_texture(0, 0, MIRROR_DISABLED, cube_sprite);
-	render_object(&cube_transform, &cube_model);
+	rdp_load_texture(0, 0, MIRROR_DISABLED, snooper_sprite);
+	render_object(&test_transform, &snooper_model);
 
 	rdp_detach_show(disp);
 
@@ -308,30 +303,30 @@ void render() {
 
 	if(ckeys.c[0].down)
 	{
-		cube_transform.y -= 0.07f;
+		test_transform.y -= 0.07f;
 	}
 	if(ckeys.c[0].up)
 	{
-		cube_transform.y += 0.07f;
+		test_transform.y += 0.07f;
 	}
 
 	if (ckeys.c[0].left) {
-		cube_transform.x -= 0.07f;
+		test_transform.x -= 0.07f;
 	}
 	if (ckeys.c[0].right) {
-		cube_transform.x += 0.07f;
+		test_transform.x += 0.07f;
 	}
 	
 	if (ckeys.c[0].A) {
-		cube_transform.rotation_z += 0.1f;
-		if (cube_transform.rotation_z >= 2.f*M_PI) {
-			cube_transform.rotation_z -= 2.f*M_PI;
+		test_transform.rotation_z += 0.1f;
+		if (test_transform.rotation_z >= 2.f*M_PI) {
+			test_transform.rotation_z -= 2.f*M_PI;
 		}
 	}
 	if (ckeys.c[0].B) {
-		cube_transform.rotation_z -= 0.1f;
-		if (cube_transform.rotation_z < 0) {
-			cube_transform.rotation_z += 2.f*M_PI;
+		test_transform.rotation_z -= 0.1f;
+		if (test_transform.rotation_z < 0) {
+			test_transform.rotation_z += 2.f*M_PI;
 		}
 	}
 }
