@@ -1,0 +1,17 @@
+scoring
+spawn rate tuning
+
+level design
+
+Level geometry
+Snooper model & animations
+Spooker model & animations
+
+
+Music
+
+Level lights
+Optimize Rendering
+Shadows?
+
+Menus

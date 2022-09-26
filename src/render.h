@@ -3,29 +3,40 @@
 
 #include <stdint.h>
 #include "libdragon.h"
+#include "vector.h"
 
 typedef struct {
-	uint16_t verts_len;
+	uint16_t positions_len;
+	uint16_t texcoords_len;
+	uint16_t norms_len;
 	uint16_t tris_len;
 
-	float *verts;
+	float *positions;
+	float *texcoords;
+	float *norms;
+
 	uint16_t *tris;
 } model_t;
 
 typedef struct {
-	float x;
-	float y;
-	float z;
-
+	vector3_t position;
 	float rotation_z;
 } object_transform_t;
 
-#define MODEL(verts, tris) {sizeof(verts)/sizeof(float),sizeof(tris)/sizeof(uint16_t),verts,tris}
+#define MODEL(positions, texcoords, norms, tris) {\
+	sizeof(positions)/sizeof(float),\
+	sizeof(texcoords)/sizeof(float),\
+	sizeof(norms)/sizeof(float),\
+	sizeof(tris)/sizeof(uint16_t),\
+	positions,\
+	texcoords,\
+	norms,\
+	tris}
 
-void render();
+bool render();
 void renderer_init();
 void clear_z_buffer();
-void render_object(const object_transform_t *transform, const model_t *model);
+void render_object_transformed_shaded(const object_transform_t *transform, const model_t *model);
 void set_camera_pitch(float camera_pitch);
 
 extern surface_t zbuffer;

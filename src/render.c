@@ -2,90 +2,21 @@
 #include "libdragon.h"
 #include <math.h>
 #include "_generated_models.h"
+#include "state.h"
+#include "primitive_models.h"
+#include "sprites.h"
 
 #define MAX_MODEL_VERTICES 256
-#define VERT_LEN 9
 
 const float camera_z_factor = -0.04f;
 const float camera_w_factor = 0.16f;
 
-float work_vertices[MAX_MODEL_VERTICES*VERT_LEN] = {};
+float work_positions[4*MAX_MODEL_VERTICES] = {};
+float work_colors[3*MAX_MODEL_VERTICES] = {};
 
-float cube_verts[] = {
-	-0.5f, -0.5f, -0.5f, 0.f, 32.f,
-	0.5f, -0.5f, -0.5f, 32.f, 32.f,
-	-0.5f, 0.5f, -0.5f, 0.f, 0.f,
-	0.5f, 0.5f, -0.5f, 32.f, 0.f,
-
-	-0.5f, -0.5f, 0.5f, 0.f, 0.f,
-	0.5f, -0.5f, 0.5f, 32.f, 0.f,
-	-0.5f, 0.5f, 0.5f, 0.f, 32.f,
-	0.5f, 0.5f, 0.5f, 32.f, 32.f,
-	
-	-0.5f, -0.5f, -0.5f, 32.f, 0.f,
-	0.5f, -0.5f, -0.5f, 0.f, 0.f,
-	-0.5f, 0.5f, -0.5f, 32.f, 32.f,
-	0.5f, 0.5f, -0.5f, 0.f, 32.f,
-};
-
-uint16_t cube_tris[] = {
-	0, 1, 4,
-	1, 4, 5,
-	8, 10, 4,
-	10, 4, 6,
-
-	9, 11, 5,
-	11, 5, 7,
-	2, 3, 6,
-	3, 6, 7,
-	4, 5, 6,
-	5, 6, 7,
-};
-
-model_t cube_model = MODEL(cube_verts, cube_tris);
-
-static object_transform_t test_transform = {
-	0.f,
-	0.f,
-	0.5f,
-	0.f
-};
-
-// x, y, z, u, v, 1/w
-float floor_verts[] = {
-	-0.5f, -0.5f, 0.0f, 0.f, 0.f,
-	0.5f, -0.5f, 0.0f, 32.f, 0.f,
-	-0.5f, 0.5f, 0.0f, 0.f, 32.f,
-	0.5f, 0.5f, 0.0f, 32.f, 32.f,
-	
-};
-
-uint16_t floor_tris[] = {
-	0, 1, 2,
-	1, 2, 3,
-};
-
-model_t floor_model = MODEL(floor_verts, floor_tris);
-
-float light_verts[] = {
-	-1.5f, -1.5f, 0.0f, 0.f, 0.f,
-	1.5f, -1.5f, 0.0f, 32.f, 0.f,
-	-1.5f, 0.0f, 0.0f, 0.f, 15.f,
-	1.5f, 0.0f, 0.0f, 32.f, 15.f,
-	-1.5f, 1.5f, 0.0f, 0.f, 0.f,
-	1.5f, 1.5f, 0.0f, 32.f, 0.f,
-};
-
-uint16_t light_tris[] = {
-	0, 1, 2,
-	1, 2, 3,
-	2, 3, 4,
-	3, 4, 5,
-};
-
-model_t light_model = MODEL(light_verts, light_tris);
-
-float camera_position[] = {0.f, -4.f, 8.f};
+float tri_vector_a[9] = {};
+float tri_vector_b[9] = {};
+float tri_vector_c[9] = {};
 
 static float camera_xx;
 static float camera_yy;
@@ -105,9 +36,15 @@ static float ambient_light_r = 0.15f;
 static float ambient_light_g = 0.25f;
 static float ambient_light_b = 0.35f;
 
-static sprite_t *ground_sprite;
 static sprite_t *snooper_sprite;
 static sprite_t *light_sprite;
+
+static long long fps_start_tick = 0;
+static int32_t fps_frame_count = 0;
+static int32_t fps = 0;
+
+const uint32_t SCREEN_WIDTH = 320;
+const uint32_t SCREEN_HEIGHT = 240;
 
 surface_t zbuffer;
 
@@ -123,32 +60,94 @@ void set_camera_pitch(float camera_pitch) {
 }
 
 void renderer_init() {
-    ground_sprite = sprite_load("rom:/ground.sprite");
+    floor_sprite = sprite_load("rom:/ground.sprite");
 	snooper_sprite = sprite_load("rom:/snooper.sprite");
 	light_sprite = sprite_load("rom:/light.sprite");
 
 	zbuffer = surface_alloc(FMT_RGBA16, 320, 240);
 
-	set_camera_pitch(0.5f);
+	set_camera_pitch(0.8f);
+	graphics_set_default_font();
 }
 
-void render_object(const object_transform_t *transform, const model_t *model) {
-	float *verts_end = model->verts + model->verts_len;
+void render_model_positioned(const vector3_t *position, const model_t *model) {
+	float relative_x = position->x - game_state.camera_position.x;
+	float relative_y = position->y - game_state.camera_position.y;
+	float relative_z = position->z - game_state.camera_position.z;
 
-	float *in_v = model->verts;
-	float *out_v = work_vertices;
+	float *in_positions = model->positions;
+	float *out_pos = work_positions;
+	for (uint16_t i = 0; i < model->positions_len; i += 3) {
+		float in_x = in_positions[i];
+		float in_y = in_positions[i + 1];
+		float in_z = in_positions[i + 2];
 
+		// translate
+		in_x += relative_x;
+		in_y += relative_y;
+		in_z += relative_z;
+
+		float x2 = camera_xx*in_x;
+		float y2 = camera_yy*in_y + camera_yz*in_z;
+		float z2 = camera_zy*in_y + camera_zz*in_z;
+
+		float w = camera_w_factor / z2;
+		x2 *= w;
+		y2 *= w;
+		x2 += 160.f;
+		y2 = 120.f - y2;
+
+		// *(out_pos++) = w;
+		*(out_pos++) = x2;
+		*(out_pos++) = y2;
+		*(out_pos++) = z2;
+	}
+
+	float *in_texcoords = model->texcoords;
+	uint16_t *in_tris = model->tris;
+	for (uint16_t i = 0; i < model->tris_len; i += 9) {
+		memcpy(tri_vector_a, work_positions+in_tris[i], 3*sizeof(float));
+		memcpy(tri_vector_a+3, in_texcoords+in_tris[i+1], 2*sizeof(float));
+
+		memcpy(tri_vector_b, work_positions+in_tris[i+3], 3*sizeof(float));
+		memcpy(tri_vector_b+3, in_texcoords+in_tris[i+4], 2*sizeof(float));
+
+		memcpy(tri_vector_c, work_positions+in_tris[i+6], 3*sizeof(float));
+		memcpy(tri_vector_c+3, in_texcoords+in_tris[i+7], 2*sizeof(float));
+
+		// TODO : tex inv w
+		tri_vector_a[5] = 1.0f;
+		tri_vector_b[5] = 1.0f;
+		tri_vector_c[5] = 1.0f;
+
+		rdpq_triangle(
+			TILE0, // tile
+			0, // mipmaps
+			0, // pos_offset
+			-1, // shade_offset
+			3, // tex_offset
+			2, // depth_offset
+			tri_vector_a,
+			tri_vector_b,
+			tri_vector_c
+		);
+	}
+}
+
+void render_object_transformed_shaded(const object_transform_t *transform, const model_t *model) {
 	float sin_yaw = sinf(transform->rotation_z);
 	float cos_yaw = cosf(transform->rotation_z);
 
-	float relative_x = transform->x - camera_position[0];
-	float relative_y = transform->y - camera_position[1];
-	float relative_z = transform->z - camera_position[2];
+	float relative_x = transform->position.x - game_state.camera_position.x;
+	float relative_y = transform->position.y - game_state.camera_position.y;
+	float relative_z = transform->position.z - game_state.camera_position.z;
 
-	while (in_v < verts_end) {
-		float in_x = *(in_v++);
-		float in_y = *(in_v++);
-		float in_z = *(in_v++);
+	float *in_positions = model->positions;
+	float *out_pos = work_positions;
+	for (uint16_t i = 0; i < model->positions_len; i += 3) {
+		float in_x = in_positions[i];
+		float in_y = in_positions[i + 1];
+		float in_z = in_positions[i + 2];
 
 		// Step 1: rotate
 		float x1 = cos_yaw*in_x + sin_yaw*in_y;
@@ -160,30 +159,35 @@ void render_object(const object_transform_t *transform, const model_t *model) {
 		y1 += relative_y;
 		z1 += relative_z;
 
-		float out_x = camera_xx*x1;
-		float out_y = camera_yy*y1 + camera_yz*z1;
-		float out_z = camera_zy*y1 + camera_zz*z1;
+		float x2 = camera_xx*x1;
+		float y2 = camera_yy*y1 + camera_yz*z1;
+		float z2 = camera_zy*y1 + camera_zz*z1;
 
-		float out_w = camera_w_factor / out_z;
-		out_x *= out_w;
-		out_y *= out_w;
-		out_x += 160.f;
-		out_y = 120.f - out_y;
+		float w = camera_w_factor / z2;
+		x2 *= w;
+		y2 *= w;
+		x2 += 160.f;
+		y2 = 120.f - y2;
 
-		*(out_v++) = out_x;
-		*(out_v++) = out_y;
-		*(out_v++) = out_z;
-		*(out_v++) = *(in_v++);
-		*(out_v++) = *(in_v++);
-		*(out_v++) = out_w;
+		// *(out_pos++) = w;
+		*(out_pos++) = x2;
+		*(out_pos++) = y2;
+		*(out_pos++) = z2;
+	}
 
-		float norm_x = *(in_v++);
-		float norm_y = *(in_v++);
-		float norm_z = *(in_v++);
+	float light_vec_x = light_direction_x * cos_yaw - light_direction_y * sin_yaw;
+	float light_vec_y = light_direction_x * sin_yaw + light_direction_y * cos_yaw;
 
+	float *in_norms = model->norms;
+	for (uint16_t i = 0; i < model->norms_len; i += 3) {
+		float norm_x = in_norms[i];
+		float norm_y = in_norms[i+1];
+		float norm_z = in_norms[i+2];
+
+		// TODO : a lot of this can be precalculated.
 		float brightness = (
-			  (light_direction_x * cos_yaw - light_direction_y * sin_yaw) * norm_x
-			+ (light_direction_x * sin_yaw + light_direction_y * cos_yaw) * norm_y
+			  light_vec_x * norm_x
+			+ light_vec_y * norm_y
 			+ light_direction_z * norm_z
 		);
 		if (brightness < 0.0f) {
@@ -191,16 +195,30 @@ void render_object(const object_transform_t *transform, const model_t *model) {
 		}
 
 		// Skip normal/color for now.
-		*(out_v++) = ambient_light_r + brightness * directional_light_r;
-		*(out_v++) = ambient_light_g + brightness * directional_light_g;
-		*(out_v++) = ambient_light_b + brightness * directional_light_b;
+		work_colors[i] = ambient_light_r + brightness * directional_light_r;
+		work_colors[i+1] = ambient_light_g + brightness * directional_light_g;
+		work_colors[i+2] = ambient_light_b + brightness * directional_light_b;
 	}
 
-	uint16_t *tris_end = model->tris + model->tris_len;
-	for (uint16_t *t = model->tris; t < tris_end;) {
-		uint16_t a = *(t++);
-		uint16_t b = *(t++);
-		uint16_t c = *(t++);
+	float *in_texcoords = model->texcoords;
+	uint16_t *in_tris = model->tris;
+	for (uint16_t i = 0; i < model->tris_len; i += 9) {
+		memcpy(tri_vector_a, work_positions+in_tris[i], 3*sizeof(float));
+		memcpy(tri_vector_a+3, in_texcoords+in_tris[i+1], 2*sizeof(float));
+		memcpy(tri_vector_a+6, work_colors+in_tris[i+2], 3*sizeof(float));
+
+		memcpy(tri_vector_b, work_positions+in_tris[i+3], 3*sizeof(float));
+		memcpy(tri_vector_b+3, in_texcoords+in_tris[i+4], 2*sizeof(float));
+		memcpy(tri_vector_b+6, work_colors+in_tris[i+5], 3*sizeof(float));
+
+		memcpy(tri_vector_c, work_positions+in_tris[i+6], 3*sizeof(float));
+		memcpy(tri_vector_c+3, in_texcoords+in_tris[i+7], 2*sizeof(float));
+		memcpy(tri_vector_c+6, work_colors+in_tris[i+8], 3*sizeof(float));
+
+		// TODO : tex inv w
+		tri_vector_a[5] = 1.0f;
+		tri_vector_b[5] = 1.0f;
+		tri_vector_c[5] = 1.0f;
 
 		rdpq_triangle(
 			TILE0, // tile
@@ -209,25 +227,34 @@ void render_object(const object_transform_t *transform, const model_t *model) {
 			6, // shade_offset
 			3, // tex_offset
 			2, // depth_offset
-			work_vertices+VERT_LEN*a,
-			work_vertices+VERT_LEN*b,
-			work_vertices+VERT_LEN*c
+			tri_vector_a,
+			tri_vector_b,
+			tri_vector_c
 		);
 	}
 }
 
 void clear_z_buffer() {
-    rdp_attach(&zbuffer);
+	rdpq_set_color_image(&zbuffer);
 	rdpq_set_mode_fill(RGBA32(0xff, 0xff, 0xff, 0xff));
-	rdpq_fill_rectangle(0, 0, 320, 240);
-	rdp_detach();
+	rdpq_fill_rectangle(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
 }
 
-void render() {
+static bool should_render(float x, float y) {
+	float relative_y = y - game_state.camera_position.y;
+	if (relative_y <= 4.f || relative_y >= 24.f) return false;
+	
+	float screen_z = camera_zy*relative_y;
+	float screen_x = camera_xx*(x-game_state.camera_position.x)*camera_w_factor/screen_z;
+
+	return (screen_x > -600.f && screen_x < 600.f);
+}
+
+bool render() {
     surface_t *disp = display_lock();
     if (!disp)
     {
-        return;
+        return false;
     }
 
 	// Clear the z buffer.
@@ -247,29 +274,31 @@ void render() {
 
 	rdpq_mode_combiner(RDPQ_COMBINER_TEX);
 
-	// Render ground
-	const uint32_t floor_size_x = 9;
-	const uint32_t floor_size_y = 7;
-	const float floor_start_x = -0.5f*(floor_size_x-1);
-	const float floor_start_y = -2.0f;
-
-	object_transform_t floor_transform = {0.f, 0.f, 0.f, 0.f};
-	for (uint32_t slice_y = 0; slice_y < ground_sprite->vslices; slice_y++) {
-		for (uint32_t slice_x = 0; slice_x < ground_sprite->hslices; slice_x++) {
-			rdp_load_texture_stride(0, 0, MIRROR_DISABLED, ground_sprite, slice_y*ground_sprite->hslices + slice_x);
-
-			for (uint32_t x = slice_x; x < floor_size_x; x += ground_sprite->hslices) {
-				for (uint32_t y = slice_y; y < floor_size_y; y += ground_sprite->vslices) {
-					floor_transform.x = floor_start_x + (float)x;
-					floor_transform.y = floor_start_y + (float)y;
-					render_object(&floor_transform, &floor_model);
+	// Render level
+	vector3_t level_position;
+	level_position.z = 0.f;
+	level_position.y = game_state.level->height - 1;
+	sprite_t *loaded_sprite = NULL;
+	const uint8_t *data = game_state.level->data;
+	for (uint16_t y = 0; y < game_state.level->height; y++) {
+		level_position.x = -game_state.level->width + 1;
+		for (uint16_t x = 0; x < game_state.level->width; x++) {
+			uint8_t d = *(data++);
+			if (d && should_render(level_position.x, level_position.y)) {
+				sprite_t *obj_sprite = floor_sprite;
+				if (obj_sprite != loaded_sprite) {
+					loaded_sprite = obj_sprite;
+					rdp_load_texture(0, 0, MIRROR_DISABLED, loaded_sprite);
 				}
+
+				render_model_positioned(&level_position, &floor_model);
 			}
+			level_position.x += 2.f;
 		}
+		level_position.y -= 2.f;
 	}
 
-	// Render light
-	rdpq_mode_blender(RDPQ_BLENDER((MEMORY_RGB, IN_ALPHA, MEMORY_RGB, ONE)));
+	// Render lights
 
 	// You can't tell me what to do!
 	/*
@@ -280,53 +309,59 @@ void render() {
         (CYCLE1_RGB, IN_ALPHA, CYCLE1_RGB, ONE)
     ));
 	*/
-
+	rdpq_mode_blender(RDPQ_BLENDER((MEMORY_RGB, IN_ALPHA, MEMORY_RGB, ONE)));
+	object_transform_t work_transform = {{0.f, 0.f, 0.f}, 0.f};
 	rdp_load_texture(0, 0, MIRROR_DISABLED, light_sprite);
-	floor_transform.x = 0.0f;
-	floor_transform.y = 0.0f;
-	floor_transform.z = 0.0f;
-	render_object(&test_transform, &light_model);
+	for (int i = 0; i < game_state.snooper_count; i++) {
+		if (game_state.snoopers[i].status == SNOOPER_STATUS_ALIVE) {
+			work_transform.position.x = game_state.snoopers[i].position.x;
+			work_transform.position.y = game_state.snoopers[i].position.y;
+			work_transform.rotation_z = game_state.snoopers[i].head_rotation_z;
+			render_object_transformed_shaded(&work_transform, &light_model);
+		}
+	}
 
-	// Render snooper
+	// Render snoopers
 	rdpq_set_mode_standard();
 	rdpq_change_other_modes_raw(SOM_Z_WRITE, SOM_Z_WRITE);
 	rdpq_change_other_modes_raw(SOM_Z_COMPARE, SOM_Z_COMPARE);
 	rdpq_mode_blender(RDPQ_BLENDER((IN_RGB, IN_ALPHA, MEMORY_RGB, ZERO)));
 	rdp_load_texture(0, 0, MIRROR_DISABLED, snooper_sprite);
-	render_object(&test_transform, &snooper_model);
+	for (int i = 0; i < game_state.snooper_count; i++) {
+		work_transform.position.x = game_state.snoopers[i].position.x;
+		work_transform.position.y = game_state.snoopers[i].position.y;
+		work_transform.rotation_z = game_state.snoopers[i].feet_rotation_z;
+		render_object_transformed_shaded(&work_transform, &snooper_model);
+	}
+
+	// Render spookers
+	// rdp_load_texture(0, 0, MIRROR_DISABLED, spooker_sprite);
+	for (int i = 0; i < game_state.spooker_count; i++) {
+		render_object_transformed_shaded(&game_state.spookers[i].transform, &snooper_model);
+	}
+
+	char fps_str[10];
+	sprintf(fps_str, "%ldFPS", fps);
+
+	rspq_wait();
+	graphics_set_color(0xFFFFFFFF, 0x00000000);
+	graphics_draw_text(disp, 6, 2, fps_str);
 
 	rdp_detach_show(disp);
 
-	// update???
-	controller_scan();
-	struct controller_data ckeys = get_keys_held();
+	fps_frame_count++;
+	if (fps_frame_count >= 10) {
+		long long now = timer_ticks();
+		long long fps_ticks = now - fps_start_tick;
+		fps_start_tick = now;
+		fps_frame_count = 0;
 
-	if(ckeys.c[0].down)
-	{
-		test_transform.y -= 0.07f;
-	}
-	if(ckeys.c[0].up)
-	{
-		test_transform.y += 0.07f;
+		float frame_seconds = ((float)fps_ticks) / 468750000.0f;
+
+		fps = (int)(1.0f / frame_seconds + 0.5f);
+		if (fps < 0) fps = 0;
+		if (fps > 99) fps = 99;
 	}
 
-	if (ckeys.c[0].left) {
-		test_transform.x -= 0.07f;
-	}
-	if (ckeys.c[0].right) {
-		test_transform.x += 0.07f;
-	}
-	
-	if (ckeys.c[0].A) {
-		test_transform.rotation_z += 0.1f;
-		if (test_transform.rotation_z >= 2.f*M_PI) {
-			test_transform.rotation_z -= 2.f*M_PI;
-		}
-	}
-	if (ckeys.c[0].B) {
-		test_transform.rotation_z -= 0.1f;
-		if (test_transform.rotation_z < 0) {
-			test_transform.rotation_z += 2.f*M_PI;
-		}
-	}
+	return true;
 }
