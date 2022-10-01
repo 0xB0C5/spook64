@@ -3,6 +3,7 @@
 
 #include "render.h"
 #include "level.h"
+#include "path.h"
 
 #define MAX_SNOOPER_COUNT 32
 #define MAX_SPOOKER_COUNT 4
@@ -46,7 +47,7 @@ typedef struct {
 } game_state_t;
 
 extern game_state_t game_state;
-void state_init();
+void state_init(const level_t *level);
 void state_update();
 
 #endif

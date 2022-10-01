@@ -5,6 +5,9 @@
 #include "state.h"
 #include "primitive_models.h"
 #include "sprites.h"
+#include "debug.h"
+
+#include "path.h"
 
 #define MAX_MODEL_VERTICES 256
 
@@ -59,6 +62,11 @@ void set_camera_pitch(float camera_pitch) {
 	camera_zz = camera_z_factor * cp;
 }
 
+
+static float line_positions[12] = {};
+
+static model_t line_model;
+
 void renderer_init() {
     floor_sprite = sprite_load("rom:/ground.sprite");
 	snooper_sprite = sprite_load("rom:/snooper.sprite");
@@ -68,6 +76,16 @@ void renderer_init() {
 
 	set_camera_pitch(0.8f);
 	graphics_set_default_font();
+
+	line_model.positions_len = ARRAY_LENGTH(line_positions);
+	line_model.texcoords_len = floor_model.texcoords_len;
+	line_model.norms_len = floor_model.norms_len;
+	line_model.tris_len = floor_model.tris_len;
+
+	line_model.positions = line_positions;
+	line_model.texcoords = floor_model.texcoords;
+	line_model.norms = floor_model.norms;
+	line_model.tris = floor_model.tris;
 }
 
 void render_model_positioned(const vector3_t *position, const model_t *model) {
@@ -114,6 +132,10 @@ void render_model_positioned(const vector3_t *position, const model_t *model) {
 
 		memcpy(tri_vector_c, work_positions+in_tris[i+6], 3*sizeof(float));
 		memcpy(tri_vector_c+3, in_texcoords+in_tris[i+7], 2*sizeof(float));
+
+		if (tri_vector_a[2] < 0.f) continue;
+		if (tri_vector_b[2] < 0.f) continue;
+		if (tri_vector_c[2] < 0.f) continue;
 
 		// TODO : tex inv w
 		tri_vector_a[5] = 1.0f;
@@ -250,12 +272,91 @@ static bool should_render(float x, float y) {
 	return (screen_x > -600.f && screen_x < 600.f);
 }
 
+
+
+static void render_line(vector2_t src, vector2_t dest, float width) {
+	if (!(should_render(src.x, src.y) || should_render(dest.x, dest.y))) {
+		return;
+	}
+
+	float dx = dest.x - src.x;
+	float dy = dest.y - src.y;
+	float dist = sqrtf(dx*dx + dy*dy);
+	float scale = width / dist;
+	float offset_x = dy * scale;
+	float offset_y = -dx * scale;
+
+	line_model.positions[0] = src.x - offset_x;
+	line_model.positions[1] = src.y - offset_y;
+
+	line_model.positions[3] = src.x + offset_x;
+	line_model.positions[4] = src.y + offset_y;
+
+	line_model.positions[6] = dest.x - offset_x;
+	line_model.positions[7] = dest.y - offset_y;
+
+	line_model.positions[9] = dest.x + offset_x;
+	line_model.positions[10] = dest.y + offset_y;
+
+	vector3_t pos = {0.f, 0.f, 0.f};
+	render_model_positioned(&pos, &line_model);
+}
+
+void render_graph(const path_graph_t *graph, int16_t closest_node) {
+	rdpq_mode_blender(RDPQ_BLENDER((BLEND_RGB, IN_ALPHA, MEMORY_RGB, INV_MUX_ALPHA)));
+	for (int16_t node_idx = 0; node_idx < graph->node_count; node_idx++) {
+		const vector2_t pos = graph->nodes[node_idx].position;
+
+		vector3_t render_pos;
+		render_pos.x = pos.x;
+		render_pos.y = pos.y;
+		render_pos.z = 0.f;
+
+		if (node_idx == closest_node) {
+			rdpq_set_blend_color(RGBA32(0x80, 0x80, 0x00, 0xff));
+		} else {
+			rdpq_set_blend_color(RGBA32(0x60, 0x60, 0x60, 0xff));
+		}
+		render_model_positioned(&render_pos, &small_square_model);
+
+		if (node_idx != closest_node) continue;
+		int16_t waypoint = graph->nodes[node_idx].waypoint_ancestor;
+		if (waypoint >= 0) {
+			rdpq_set_blend_color(RGBA32(0x80, 0x00, 0x00, 0xff));
+			render_line(pos, graph->nodes[waypoint].position, 0.1f);
+		}
+	}
+
+	rdpq_set_blend_color(RGBA32(0x00, 0x40, 0x80, 0xff));
+	for (int16_t edge_idx = 0; edge_idx < graph->edge_count; edge_idx++) {
+		const path_edge_t *edge = &graph->edges[edge_idx];
+		if (edge->src != closest_node) continue;
+		render_line(graph->nodes[edge->src].position, graph->nodes[edge->dest].position, 0.05f);
+	}
+}
+
 bool render() {
     surface_t *disp = display_lock();
     if (!disp)
     {
         return false;
     }
+
+	int16_t closest_node = -1;
+	{
+		const vector3_t *spooker_position = &game_state.spookers[0].transform.position;
+		float closest_dist2 = 9999.f;
+		for (int16_t node_idx = 0; node_idx < game_state.level->path_graph->node_count; node_idx++) {
+			vector2_t pos = game_state.level->path_graph->nodes[node_idx].position;
+			float dx = pos.x - spooker_position->x;
+			float dy = pos.y - spooker_position->y;
+			float dist2 = dx*dx + dy*dy;
+			if (dist2 < closest_dist2) {
+				closest_dist2 = dist2;
+				closest_node = node_idx;
+			}
+		}
+	}
 
 	// Clear the z buffer.
 	clear_z_buffer();
@@ -298,6 +399,9 @@ bool render() {
 		level_position.y -= 2.f;
 	}
 
+	// Render paths
+	// render_graph(game_state.level->path_graph, closest_node);
+
 	// Render lights
 
 	// You can't tell me what to do!
@@ -313,12 +417,14 @@ bool render() {
 	object_transform_t work_transform = {{0.f, 0.f, 0.f}, 0.f};
 	rdp_load_texture(0, 0, MIRROR_DISABLED, light_sprite);
 	for (int i = 0; i < game_state.snooper_count; i++) {
-		if (game_state.snoopers[i].status == SNOOPER_STATUS_ALIVE) {
-			work_transform.position.x = game_state.snoopers[i].position.x;
-			work_transform.position.y = game_state.snoopers[i].position.y;
-			work_transform.rotation_z = game_state.snoopers[i].head_rotation_z;
-			render_object_transformed_shaded(&work_transform, &light_model);
-		}
+		if (game_state.snoopers[i].status != SNOOPER_STATUS_ALIVE) continue;
+		if (!should_render(game_state.snoopers[i].position.x, game_state.snoopers[i].position.y)) continue;
+
+		work_transform.position.x = game_state.snoopers[i].position.x;
+		work_transform.position.y = game_state.snoopers[i].position.y;
+		work_transform.rotation_z = game_state.snoopers[i].head_rotation_z;
+		// render_model_positioned(&work_transform.position, &light_model);
+		render_object_transformed_shaded(&work_transform, &light_model);
 	}
 
 	// Render snoopers
@@ -328,24 +434,36 @@ bool render() {
 	rdpq_mode_blender(RDPQ_BLENDER((IN_RGB, IN_ALPHA, MEMORY_RGB, ZERO)));
 	rdp_load_texture(0, 0, MIRROR_DISABLED, snooper_sprite);
 	for (int i = 0; i < game_state.snooper_count; i++) {
+		if (!should_render(game_state.snoopers[i].position.x, game_state.snoopers[i].position.y)) continue;
+
 		work_transform.position.x = game_state.snoopers[i].position.x;
 		work_transform.position.y = game_state.snoopers[i].position.y;
-		work_transform.rotation_z = game_state.snoopers[i].feet_rotation_z;
+		work_transform.rotation_z = game_state.snoopers[i].head_rotation_z;
+		// render_model_positioned(&work_transform.position, &snooper_model);
 		render_object_transformed_shaded(&work_transform, &snooper_model);
 	}
 
 	// Render spookers
 	// rdp_load_texture(0, 0, MIRROR_DISABLED, spooker_sprite);
 	for (int i = 0; i < game_state.spooker_count; i++) {
+		// render_model_positioned(&game_state.spookers[i].transform.position, &snooper_model);
 		render_object_transformed_shaded(&game_state.spookers[i].transform, &snooper_model);
 	}
 
-	char fps_str[10];
-	sprintf(fps_str, "%ldFPS", fps);
+	char info_str[64];
+	sprintf(info_str, "%ldFPS", fps);
 
 	rspq_wait();
 	graphics_set_color(0xFFFFFFFF, 0x00000000);
-	graphics_draw_text(disp, 6, 2, fps_str);
+	graphics_draw_text(disp, 6, 2, info_str);
+
+	{
+		const vector3_t *spooker_position = &game_state.spookers[0].transform.position;
+		sprintf(info_str, "%d %.1f %.1f", closest_node, spooker_position->x, spooker_position->y);
+	}
+
+	graphics_draw_text(disp, 60, 2, info_str);
+	graphics_draw_text(disp, 6, 10, debug_message);
 
 	rdp_detach_show(disp);
 

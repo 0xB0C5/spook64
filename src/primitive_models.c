@@ -50,3 +50,13 @@ static uint16_t light_tris[] = {
 };
 
 model_t light_model = MODEL(light_positions, light_texcoords, light_norms, light_tris);
+
+
+static float small_square_positions[] = {
+	-0.2f, -0.2f, 0.0f,
+	0.2f, -0.2f, 0.0f,
+	-0.2f, 0.2f, 0.0f,
+	0.2f, 0.2f, 0.0f,
+};
+
+model_t small_square_model = MODEL(small_square_positions, floor_texcoords, floor_norms, floor_tris);

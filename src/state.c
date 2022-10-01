@@ -28,7 +28,7 @@
 
 game_state_t game_state;
 
-void state_init() {
+void state_init(const level_t *level) {
 	game_state.spooker_count = 1;
 	game_state.spookers[0].transform.position.x = 0.f;
 	game_state.spookers[0].transform.position.y = 0.f;
@@ -45,7 +45,9 @@ void state_init() {
 
 	game_state.snooper_timer = 1;
 
-	game_state.level = &level0;
+	game_state.level = level;
+
+	path_set_graph(level->path_graph);
 }
 
 static void spawn_snooper() {
@@ -54,15 +56,9 @@ static void spawn_snooper() {
 
 		new_snooper->status = SNOOPER_STATUS_ALIVE;
 
-		size_t path_count = game_state.level->path_count;
-		uint32_t path_index = RANDN(path_count);
-		const path_t *path = game_state.level->paths[path_index];
-		new_snooper->path_follower.path = path;
-		new_snooper->path_follower.index = 0;
-		new_snooper->path_follower.progress = 0.0f;
+		path_follower_init(&new_snooper->path_follower);
+		new_snooper->position = new_snooper->path_follower.position;
 
-		new_snooper->position.x = path->positions[0].x;
-		new_snooper->position.y = path->positions[0].y;
 		new_snooper->feet_rotation_z = M_PI;
 		new_snooper->head_rotation_z = M_PI;
 
@@ -125,7 +121,7 @@ void state_update() {
 	if (game_state.snooper_timer == 0) {
 		game_state.snooper_timer = 60;
 
-		// spawn_snooper();
+		spawn_snooper();
 	}
 	if (game_state.snooper_count == 0) {
 		spawn_snooper();
@@ -136,33 +132,36 @@ void state_update() {
 		snooper_state_t *snooper = game_state.snoopers + i;
 
 		if (snooper->freeze_timer == 0) {
-			vector2_t target;
 			float speed = snooper->status == SNOOPER_STATUS_ALIVE ? SNOOPER_SPEED : -SNOOPER_RUN_SPEED;
-			bool end = path_follow(&snooper->path_follower, &target, speed);
+			bool end = path_follow(&snooper->path_follower, speed);
 
 			if (end) {
 				snooper->status = SNOOPER_STATUS_DEAD;
 				continue;
 			}
-			float dx = target.x - snooper->position.x;
-			float dy = target.y - snooper->position.y;
+			float dx = snooper->path_follower.position.x - snooper->position.x;
+			float dy = snooper->path_follower.position.y - snooper->position.y;
 			if (dx != 0.f || dy != 0.f) {
 				snooper->feet_rotation_z = atan2f(dx, dy);
 			}
 			float smoothness = snooper->status == SNOOPER_STATUS_ALIVE ? 0.9f : 0.8f;
 			float roughness = 1.f - smoothness;
-			snooper->position.x = smoothness * snooper->position.x + roughness * target.x;
-			snooper->position.y = smoothness * snooper->position.y + roughness * target.y;
-			
-			if (--snooper->rotate_timer == 0) {
-				snooper->rotate_timer = 30 + RANDN(90);
-				float target_rotation_z = snooper->feet_rotation_z + (M_PI/2.0f)*(randf()-0.5f);
-				if (target_rotation_z < -M_PI) {
-					target_rotation_z += 2.f*M_PI;
-				} else if (target_rotation_z > M_PI) {
-					target_rotation_z -= 2.f*M_PI;
+			snooper->position.x = smoothness * snooper->position.x + roughness * snooper->path_follower.position.x;
+			snooper->position.y = smoothness * snooper->position.y + roughness * snooper->path_follower.position.y;
+
+			if (snooper->status == SNOOPER_STATUS_ALIVE) {
+				if (--snooper->rotate_timer == 0) {
+					snooper->rotate_timer = 30 + RANDN(90);
+					float target_rotation_z = snooper->feet_rotation_z + (M_PI/2.0f)*(randf()-0.5f);
+					if (target_rotation_z < -M_PI) {
+						target_rotation_z += 2.f*M_PI;
+					} else if (target_rotation_z > M_PI) {
+						target_rotation_z -= 2.f*M_PI;
+					}
+					snooper->head_target_rotation_z = target_rotation_z;
 				}
-				snooper->head_target_rotation_z = target_rotation_z;
+			} else {
+				snooper->head_target_rotation_z = snooper->feet_rotation_z;
 			}
 		} else {
 			snooper->freeze_timer--;
@@ -270,18 +269,20 @@ void state_update() {
 				spooker->transform.rotation_z -= 2.f*M_PI;
 			}
 		}
-		
-		if (spooker->transform.position.x > game_state.level->width) {
-			spooker->transform.position.x = game_state.level->width;
+
+		float spooker_max_x = game_state.level->width-2.f;
+		if (spooker->transform.position.x > spooker_max_x) {
+			spooker->transform.position.x = spooker_max_x;
 		}
-		if (spooker->transform.position.x < -game_state.level->width) {
-			spooker->transform.position.x = -game_state.level->width;
+		if (spooker->transform.position.x < -spooker_max_x) {
+			spooker->transform.position.x = -spooker_max_x;
 		}
-		if (spooker->transform.position.y > game_state.level->height) {
-			spooker->transform.position.y = game_state.level->height;
+		float spooker_max_y = game_state.level->height-2.f;
+		if (spooker->transform.position.y > spooker_max_y) {
+			spooker->transform.position.y = spooker_max_y;
 		}
-		if (spooker->transform.position.y < -game_state.level->height) {
-			spooker->transform.position.y = -game_state.level->height;
+		if (spooker->transform.position.y < -spooker_max_y) {
+			spooker->transform.position.y = -spooker_max_y;
 		}
 	}
 

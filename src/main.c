@@ -6,30 +6,9 @@
 #include "state.h"
 #include "sfx.h"
 
-/*
 model_t *test_models[] = {
-	&snooper_animated_000001_model,
-	&snooper_animated_000002_model,
-	&snooper_animated_000003_model,
-	&snooper_animated_000004_model,
-	&snooper_animated_000005_model,
-	&snooper_animated_000006_model,
-	&snooper_animated_000007_model,
-	&snooper_animated_000008_model,
-	&snooper_animated_000009_model,
-	&snooper_animated_000010_model,
-	&snooper_animated_000011_model,
-	&snooper_animated_000012_model,
-	&snooper_animated_000013_model,
-	&snooper_animated_000014_model,
-	&snooper_animated_000015_model,
-	&snooper_animated_000016_model,
-	&snooper_animated_000017_model,
-	&snooper_animated_000018_model,
-	&snooper_animated_000019_model,
-	&snooper_animated_000020_model,
+	&snooper_model,
 };
-*/
 
 int main()
 {
@@ -50,7 +29,7 @@ int main()
     rdpq_debug_start();
 
 	renderer_init();
-	state_init();
+	state_init(&level0);
 
 	sfx_init();
 
