@@ -118,12 +118,9 @@ float step_to_angle(float cur, float target) {
 void state_update() {
 	// Spawn snooper?
 	game_state.snooper_timer--;
-	if (game_state.snooper_timer == 0) {
-		game_state.snooper_timer = 60;
+	if (game_state.snooper_count == 0 || game_state.snooper_timer == 0) {
+		game_state.snooper_timer = 120;
 
-		spawn_snooper();
-	}
-	if (game_state.snooper_count == 0) {
 		spawn_snooper();
 	}
 
