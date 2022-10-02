@@ -1,3 +1,5 @@
+iframes so you can't get stuck indefinitely.
+
 scoring
 spawn rate tuning
 level advancing

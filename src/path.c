@@ -82,7 +82,7 @@ bool path_follow(path_follower_t *follower, float speed) {
 	float delta_y = target->y - follower->position.y;
 	float dist = sqrtf(delta_x*delta_x + delta_y*delta_y);
 
-	float ratio = fabs(speed) / dist;
+	float ratio = dist == 0.f ? 2.f : fabs(speed) / dist;
 	if (ratio < 1.f) {
 		// Normal movement - no target node change.
 		follower->position.x += ratio * delta_x;

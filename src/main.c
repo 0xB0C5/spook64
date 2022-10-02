@@ -26,13 +26,24 @@ int main()
     mixer_init(32);
 
     rdp_init();
-    rdpq_debug_start();
+	// TODO : rdpq debug is slowing things to a crawl.
+	// investigate wtf I'm doing wrong!
+    //rdpq_debug_start();
+
+	// TODO : for some reason it's generating underflow exceptions despite C1_FCR31_FS being set?
+	// Disable underflow exceptions.
+	// (C1_FCR31_FS is supposed to flush denormals to 0?)
+	C1_WRITE_FCR31(
+		C1_ENABLE_OVERFLOW
+		//| C1_ENABLE_UNDERFLOW
+		| C1_ENABLE_DIV_BY_0
+		| C1_ENABLE_INVALID_OP
+		| C1_FCR31_FS);
 
 	renderer_init();
 	state_init(&level0);
 
 	sfx_init();
-
 	// show_model_viewer(sizeof(test_models) / sizeof(model_t*), test_models, "rom:/snooper.sprite");
 
     while (1)
