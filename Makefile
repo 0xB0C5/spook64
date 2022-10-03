@@ -38,7 +38,7 @@ filesystem/light.sprite: MKSPRITE_FLAGS=--format RGBA32 --tiles 32,32
 $(BUILD_DIR)/spook64.dfs: $(assets_conv)
 $(BUILD_DIR)/spook64.elf: $(src:%.c=$(BUILD_DIR)/%.o)
 
-spook64.z64: N64_ROM_TITLE="RSPQ Demo"
+spook64.z64: N64_ROM_TITLE="SuperSnooperSpookers"
 spook64.z64: $(BUILD_DIR)/spook64.dfs 
 
 clean:

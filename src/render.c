@@ -88,6 +88,7 @@ void renderer_init() {
 	line_model.tris = floor_model.tris;
 }
 
+extern void rdpq_triangle_cpu(rdpq_tile_t tile, uint8_t mipmaps, int32_t pos_offset, int32_t shade_offset, int32_t tex_offset, int32_t z_offset, const float *v1, const float *v2, const float *v3);
 void render_model_positioned(const vector3_t *position, const model_t *model) {
 	float relative_x = position->x - game_state.camera_position.x;
 	float relative_y = position->y - game_state.camera_position.y;
@@ -365,13 +366,14 @@ bool render() {
 	rdpq_set_z_image(&zbuffer);
 
 	// Clear the framebuffer.
-	rdpq_set_mode_fill(RGBA32(0, 0, 0, 0));
+	rdpq_set_mode_fill(RGBA32(0, 0, 0x20, 0));
 	rdpq_fill_rectangle(0, 0, 320, 240);
 
 	rdpq_set_mode_standard();
-	rdpq_set_other_modes_raw(SOM_TEXTURE_PERSP);
+	rdpq_set_other_modes_raw(SOM_TEXTURE_PERSP | SOM_TF0_RGB);
 	rdpq_change_other_modes_raw(SOM_SAMPLE_MASK, SOM_SAMPLE_BILINEAR);
 	// rdpq_change_other_modes_raw(SOM_AA_ENABLE, SOM_AA_ENABLE);
+	rdpq_mode_mipmap(MIPMAP_NONE, 0);
 
 	rdpq_mode_combiner(RDPQ_COMBINER_TEX);
 
@@ -389,7 +391,9 @@ bool render() {
 				sprite_t *obj_sprite = floor_sprite;
 				if (obj_sprite != loaded_sprite) {
 					loaded_sprite = obj_sprite;
+					rdpq_sync_load();
 					rdp_load_texture(0, 0, MIRROR_DISABLED, loaded_sprite);
+					rdpq_sync_load();
 				}
 
 				render_model_positioned(&level_position, &floor_model);
@@ -415,6 +419,7 @@ bool render() {
 	*/
 	rdpq_mode_blender(RDPQ_BLENDER((MEMORY_RGB, IN_ALPHA, MEMORY_RGB, ONE)));
 	object_transform_t work_transform = {{0.f, 0.f, 0.f}, 0.f};
+	rdpq_sync_load();
 	rdp_load_texture(0, 0, MIRROR_DISABLED, light_sprite);
 	for (int i = 0; i < game_state.snooper_count; i++) {
 		if (game_state.snoopers[i].status != SNOOPER_STATUS_ALIVE) continue;
@@ -431,7 +436,9 @@ bool render() {
 	rdpq_set_mode_standard();
 	rdpq_change_other_modes_raw(SOM_Z_WRITE, SOM_Z_WRITE);
 	rdpq_change_other_modes_raw(SOM_Z_COMPARE, SOM_Z_COMPARE);
+	rdpq_change_other_modes_raw(SOM_TF_MASK, SOM_TF0_RGB);
 	rdpq_mode_blender(RDPQ_BLENDER((IN_RGB, IN_ALPHA, MEMORY_RGB, ZERO)));
+	rdpq_sync_load();
 	rdp_load_texture(0, 0, MIRROR_DISABLED, snooper_sprite);
 	for (int i = 0; i < game_state.snooper_count; i++) {
 		if (!should_render(game_state.snoopers[i].position.x, game_state.snoopers[i].position.y)) continue;
@@ -444,6 +451,7 @@ bool render() {
 	}
 
 	// Render spookers
+	// rdpq_sync_load();
 	// rdp_load_texture(0, 0, MIRROR_DISABLED, spooker_sprite);
 	for (int i = 0; i < game_state.spooker_count; i++) {
 		// render_model_positioned(&game_state.spookers[i].transform.position, &snooper_model);

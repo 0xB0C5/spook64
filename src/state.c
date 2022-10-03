@@ -162,15 +162,22 @@ void state_update() {
 			}
 		} else {
 			snooper->freeze_timer--;
-			// Look at spooker if nearby and being knocked back.
-			if (game_state.spookers[0].knockback_timer != 0) {
-				vector3_t *spooker_pos = &game_state.spookers[0].transform.position;
-				vector2_t *snooper_pos = &snooper->position;
-				float dx = spooker_pos->x - snooper_pos->x;
-				float dy = spooker_pos->y - snooper_pos->y;
 
-				if (dx*dx + dy*dy < SNOOPER_LOOK_DIST*SNOOPER_LOOK_DIST) {
-					snooper->head_target_rotation_z = atan2f(dx, dy);
+			if (snooper->status == SNOOPER_STATUS_ALIVE) {
+				// Look at spooker if nearby and being knocked back.
+				if (game_state.spookers[0].knockback_timer != 0) {
+					vector3_t *spooker_pos = &game_state.spookers[0].transform.position;
+					vector2_t *snooper_pos = &snooper->position;
+					float dx = spooker_pos->x - snooper_pos->x;
+					float dy = spooker_pos->y - snooper_pos->y;
+
+					if (dx*dx + dy*dy < SNOOPER_LOOK_DIST*SNOOPER_LOOK_DIST) {
+						snooper->head_target_rotation_z = atan2f(dx, dy);
+					}
+				}
+			} else if (snooper->status == SNOOPER_STATUS_SPOOKED) {
+				if (snooper->freeze_timer == 0) {
+					sfx_snooper_scream();
 				}
 			}
 		}
@@ -284,6 +291,7 @@ void state_update() {
 	}
 
 	if (ckeys.c[0].A && game_state.spookers[0].spook_timer == 0 && game_state.spookers[0].knockback_timer == 0) {
+		sfx_spooker_spook();
 		for (uint16_t i = 0; i < game_state.snooper_count; i++) {
 			if (game_state.snoopers[i].status != SNOOPER_STATUS_ALIVE) {
 				continue;
@@ -293,7 +301,7 @@ void state_update() {
 			float dist2 = dx*dx + dy*dy;
 			if (dist2 < SPOOK_DISTANCE*SPOOK_DISTANCE) {
 				game_state.snoopers[i].status = SNOOPER_STATUS_SPOOKED;
-				sfx_snooper_scream();
+				game_state.snoopers[i].freeze_timer = 5;
 			}
 		}
 		game_state.spookers[0].spook_timer = 30;

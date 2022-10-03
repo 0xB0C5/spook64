@@ -13,9 +13,9 @@ model_t *test_models[] = {
 int main()
 {
     display_init(RESOLUTION_320x240, DEPTH_16_BPP, 3, GAMMA_NONE, ANTIALIAS_RESAMPLE);
-
-    debug_init_isviewer();
-    debug_init_usblog();
+	bool ok = debug_init(DEBUG_FEATURE_LOG_ISVIEWER);
+	assertf(ok, "debug_init failed.");
+	debugf("debug test!\n");
 
     controller_init();
     timer_init();
@@ -28,7 +28,7 @@ int main()
     rdp_init();
 	// TODO : rdpq debug is slowing things to a crawl.
 	// investigate wtf I'm doing wrong!
-    //rdpq_debug_start();
+    rdpq_debug_start();
 
 	// TODO : for some reason it's generating underflow exceptions despite C1_FCR31_FS being set?
 	// Disable underflow exceptions.
