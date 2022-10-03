@@ -11,9 +11,9 @@ static float floor_positions[] = {
 
 static float floor_texcoords[] = {
 	0.f, 0.f,
-	32.f, 0.f,
+	64.f, 0.f,
 	0.f, 32.f,
-	32.f, 32.f,
+	64.f, 32.f,
 };
 
 static float floor_norms[] = {

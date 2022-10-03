@@ -67,6 +67,7 @@ void render_model_viewer(model_viewer_t *viewer) {
 	rdpq_change_other_modes_raw(SOM_TF_MASK, SOM_TF0_RGB);
 	rdpq_mode_blender(RDPQ_BLENDER((IN_RGB, IN_ALPHA, IN_RGB, INV_MUX_ALPHA)));
 	rdpq_mode_mipmap(MIPMAP_NONE, 0);
+
 	rdp_load_texture(0, 0, MIRROR_DISABLED, viewer->sprite);
 	render_object_transformed_shaded(&viewer->transform, viewer->model);
 

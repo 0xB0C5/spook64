@@ -1,3 +1,3 @@
-#include "libdragon.h"
+#include "dragon.h"
 
 extern sprite_t *floor_sprite;

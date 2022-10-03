@@ -1,20 +1,20 @@
-#include "libdragon.h"
+#include "dragon.h"
 #include <malloc.h>
 #include "render.h"
 #include "_generated_models.h"
+#include "primitive_models.h"
 #include "model_viewer.h"
 #include "state.h"
 #include "sfx.h"
 
 model_t *test_models[] = {
-	&snooper_model,
+	&floor_model,
 };
 
 int main()
 {
     display_init(RESOLUTION_320x240, DEPTH_16_BPP, 3, GAMMA_NONE, ANTIALIAS_RESAMPLE);
-	bool ok = debug_init(DEBUG_FEATURE_LOG_ISVIEWER);
-	assertf(ok, "debug_init failed.");
+	debug_init(DEBUG_FEATURE_LOG_ISVIEWER);
 	debugf("debug test!\n");
 
     controller_init();
@@ -44,7 +44,7 @@ int main()
 	state_init(&level0);
 
 	sfx_init();
-	// show_model_viewer(sizeof(test_models) / sizeof(model_t*), test_models, "rom:/snooper.sprite");
+	// show_model_viewer(ARRAY_LENGTH(test_models), test_models, "rom:/test.sprite");
 
     while (1)
     {

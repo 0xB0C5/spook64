@@ -1,11 +1,11 @@
 #include "render.h"
-#include "libdragon.h"
 #include <math.h>
 #include "_generated_models.h"
 #include "state.h"
 #include "primitive_models.h"
 #include "sprites.h"
 #include "debug.h"
+#include "libdragon_hax.h"
 
 #include "path.h"
 
@@ -51,6 +51,8 @@ const uint32_t SCREEN_HEIGHT = 240;
 
 surface_t zbuffer;
 
+static uint32_t tri_count;
+
 void set_camera_pitch(float camera_pitch) {
 	float sp = sinf(camera_pitch);
 	float cp = cosf(camera_pitch);
@@ -88,7 +90,6 @@ void renderer_init() {
 	line_model.tris = floor_model.tris;
 }
 
-extern void rdpq_triangle_cpu(rdpq_tile_t tile, uint8_t mipmaps, int32_t pos_offset, int32_t shade_offset, int32_t tex_offset, int32_t z_offset, const float *v1, const float *v2, const float *v3);
 void render_model_positioned(const vector3_t *position, const model_t *model) {
 	float relative_x = position->x - game_state.camera_position.x;
 	float relative_y = position->y - game_state.camera_position.y;
@@ -154,6 +155,7 @@ void render_model_positioned(const vector3_t *position, const model_t *model) {
 			tri_vector_b,
 			tri_vector_c
 		);
+		tri_count++;
 	}
 }
 
@@ -254,6 +256,7 @@ void render_object_transformed_shaded(const object_transform_t *transform, const
 			tri_vector_b,
 			tri_vector_c
 		);
+		tri_count++;
 	}
 }
 
@@ -343,6 +346,7 @@ bool render() {
         return false;
     }
 
+	tri_count = 0;
 	int16_t closest_node = -1;
 	{
 		const vector3_t *spooker_position = &game_state.spookers[0].transform.position;
@@ -434,10 +438,15 @@ bool render() {
 
 	// Render snoopers
 	rdpq_set_mode_standard();
+	rdpq_mode_combiner(RDPQ_COMBINER_TEX_SHADE);
+	rdpq_set_other_modes_raw(SOM_TEXTURE_PERSP);
+	rdpq_change_other_modes_raw(SOM_SAMPLE_MASK, SOM_SAMPLE_BILINEAR);
 	rdpq_change_other_modes_raw(SOM_Z_WRITE, SOM_Z_WRITE);
 	rdpq_change_other_modes_raw(SOM_Z_COMPARE, SOM_Z_COMPARE);
 	rdpq_change_other_modes_raw(SOM_TF_MASK, SOM_TF0_RGB);
-	rdpq_mode_blender(RDPQ_BLENDER((IN_RGB, IN_ALPHA, MEMORY_RGB, ZERO)));
+	rdpq_mode_blender(RDPQ_BLENDER((IN_RGB, IN_ALPHA, IN_RGB, INV_MUX_ALPHA)));
+	rdpq_mode_mipmap(MIPMAP_NONE, 0);
+
 	rdpq_sync_load();
 	rdp_load_texture(0, 0, MIRROR_DISABLED, snooper_sprite);
 	for (int i = 0; i < game_state.snooper_count; i++) {
@@ -467,7 +476,7 @@ bool render() {
 
 	{
 		const vector3_t *spooker_position = &game_state.spookers[0].transform.position;
-		sprintf(info_str, "%d %.1f %.1f", closest_node, spooker_position->x, spooker_position->y);
+		sprintf(info_str, "%d %.1f %.1f %ld", closest_node, spooker_position->x, spooker_position->y, tri_count);
 	}
 
 	graphics_draw_text(disp, 60, 2, info_str);

@@ -2,7 +2,7 @@
 #define SPOOK64_RENDER
 
 #include <stdint.h>
-#include "libdragon.h"
+#include "dragon.h"
 #include "vector.h"
 
 typedef struct {

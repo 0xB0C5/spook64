@@ -1,7 +1,7 @@
 #ifndef SPOOK64_LEVEL
 #define SPOOK64_LEVEL
 #include "path.h"
-#include "libdragon.h"
+#include "dragon.h"
 
 typedef struct {
 	const uint16_t width;

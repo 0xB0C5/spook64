@@ -1,4 +1,4 @@
-#include "libdragon.h"
+#include "dragon.h"
 
 void sfx_init();
 void sfx_snooper_scream();

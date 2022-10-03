@@ -1,5 +1,5 @@
 #include "state.h"
-#include "libdragon.h"
+#include "dragon.h"
 #include "math.h"
 #include "rand.h"
 
