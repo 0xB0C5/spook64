@@ -28,16 +28,16 @@ static uint16_t floor_tris[] = {
 model_t floor_model = MODEL(floor_positions, floor_texcoords, floor_norms, floor_tris);
 
 static float light_positions[] = {
-	-0.5f, 0.5f, 0.0f,
-	0.5f, 0.5f, 0.0f,
+	-0.75f, 0.5f, 0.0f,
+	0.75f, 0.5f, 0.0f,
 	-1.5f, 6.0f, 0.0f,
 	1.5f, 6.0f, 0.0f,
 };
 static float light_texcoords[] = {
 	0.f, 0.f,
-	16.f, 0.f,
-	0.f, 32.f,
-	16.f, 32.f,
+	31.f, 0.f,
+	0.f, 63.f,
+	31.f, 63.f,
 };
 
 static float light_norms[] = {

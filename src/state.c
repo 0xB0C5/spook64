@@ -128,24 +128,28 @@ void state_update() {
 	for (uint16_t i = 0; i < game_state.snooper_count; i++) {
 		snooper_state_t *snooper = game_state.snoopers + i;
 
+		float speed = snooper->status == SNOOPER_STATUS_ALIVE ? SNOOPER_SPEED : -SNOOPER_RUN_SPEED;
+		if (snooper->freeze_timer != 0) {
+			speed *= 0.5f;
+		}
+
+		bool end = path_follow(&snooper->path_follower, speed);
+
+		if (end) {
+			snooper->status = SNOOPER_STATUS_DEAD;
+			continue;
+		}
+		float dx = snooper->path_follower.position.x - snooper->position.x;
+		float dy = snooper->path_follower.position.y - snooper->position.y;
+		if (dx != 0.f || dy != 0.f) {
+			snooper->feet_rotation_z = atan2f(dx, dy);
+		}
+		float smoothness = snooper->status == SNOOPER_STATUS_ALIVE ? 0.9f : 0.8f;
+		float roughness = 1.f - smoothness;
+		snooper->position.x = smoothness * snooper->position.x + roughness * snooper->path_follower.position.x;
+		snooper->position.y = smoothness * snooper->position.y + roughness * snooper->path_follower.position.y;
+
 		if (snooper->freeze_timer == 0) {
-			float speed = snooper->status == SNOOPER_STATUS_ALIVE ? SNOOPER_SPEED : -SNOOPER_RUN_SPEED;
-			bool end = path_follow(&snooper->path_follower, speed);
-
-			if (end) {
-				snooper->status = SNOOPER_STATUS_DEAD;
-				continue;
-			}
-			float dx = snooper->path_follower.position.x - snooper->position.x;
-			float dy = snooper->path_follower.position.y - snooper->position.y;
-			if (dx != 0.f || dy != 0.f) {
-				snooper->feet_rotation_z = atan2f(dx, dy);
-			}
-			float smoothness = snooper->status == SNOOPER_STATUS_ALIVE ? 0.9f : 0.8f;
-			float roughness = 1.f - smoothness;
-			snooper->position.x = smoothness * snooper->position.x + roughness * snooper->path_follower.position.x;
-			snooper->position.y = smoothness * snooper->position.y + roughness * snooper->path_follower.position.y;
-
 			if (snooper->status == SNOOPER_STATUS_ALIVE) {
 				if (--snooper->rotate_timer == 0) {
 					snooper->rotate_timer = 30 + RANDN(90);

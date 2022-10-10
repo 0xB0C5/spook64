@@ -421,15 +421,16 @@ bool render() {
 	rdpq_change_other_modes_raw(SOM_SAMPLE_MASK, SOM_SAMPLE_BILINEAR);
 	rdpq_change_other_modes_raw(SOM_Z_WRITE, 0);
 	rdpq_change_other_modes_raw(SOM_Z_COMPARE, 0);
-	rdpq_change_other_modes_raw(SOM_AA_ENABLE, SOM_AA_ENABLE);
+	// rdpq_change_other_modes_raw(SOM_AA_ENABLE, SOM_AA_ENABLE);
 	rdpq_mode_mipmap(MIPMAP_NONE, 0);
 
 	rdpq_mode_combiner(RDPQ_COMBINER_TEX);
 	object_transform_t work_transform = {{0.f, 0.f, 0.f}, 0.f};
-	rdpq_mode_blender(RDPQ_BLENDER((IN_RGB, IN_ALPHA, MEMORY_RGB, INV_MUX_ALPHA)));
+	rdpq_set_blend_color(RGBA32(0, 0, 0xff, 0xff));
+	rdpq_mode_blender(RDPQ_BLENDER((BLEND_RGB, IN_ALPHA, MEMORY_RGB, INV_MUX_ALPHA)));
 	rdpq_sync_load();
-	rdp_load_texture(0, 0, MIRROR_DISABLED, light_sprite);
-	// rdp_load_texture_stride_hax(0, 0, MIRROR_DISABLED, light_sprite, light_sprite->data, 0);
+	// rdp_load_texture(0, 0, MIRROR_DISABLED, light_sprite);
+	rdp_load_texture_stride_hax(0, 0, MIRROR_DISABLED, light_sprite, light_sprite->data, 0);
 	for (int i = 0; i < game_state.snooper_count; i++) {
 		if (game_state.snoopers[i].status != SNOOPER_STATUS_ALIVE) continue;
 		if (!should_render(game_state.snoopers[i].position.x, game_state.snoopers[i].position.y)) continue;
@@ -497,7 +498,6 @@ bool render() {
 
 	// Render paths
 	// render_graph(game_state.level->path_graph, closest_node);
-
 
 	// Apply lights
 	rdpq_sync_load();
