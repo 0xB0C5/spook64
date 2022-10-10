@@ -18,6 +18,7 @@
 
 
 const float camera_z_factor = -0.04f;
+const float camera_w_factor_base = 0.16f;
 static float camera_wx_factor;
 static float camera_wy_factor;
 
@@ -69,8 +70,8 @@ void update_framebuffer_size(surface_t *surf) {
 	half_framebuffer_width = surf->width / 2;
 	half_framebuffer_height = surf->height / 2;
 
-	camera_wx_factor = half_framebuffer_width/160.f * 0.16f;
-	camera_wy_factor = half_framebuffer_height/120.f * 0.16f;
+	camera_wx_factor = half_framebuffer_width/160.f * camera_w_factor_base;
+	camera_wy_factor = half_framebuffer_height/120.f * camera_w_factor_base;
 }
 
 void set_camera_pitch(float camera_pitch) {
@@ -315,7 +316,7 @@ static bool should_render(float x, float y) {
 	if (relative_y <= 4.f || relative_y >= 24.f) return false;
 	
 	float screen_z = camera_zy*relative_y;
-	float screen_x = camera_xx*(x-game_state.camera_position.x)*camera_wx_factor/screen_z;
+	float screen_x = camera_xx*(x-game_state.camera_position.x)*camera_w_factor_base/screen_z;
 
 	return (screen_x > -600.f && screen_x < 600.f);
 }
@@ -441,14 +442,24 @@ bool render() {
 	// rdp_load_texture(0, 0, MIRROR_DISABLED, light_sprite);
 	rdp_load_texture_stride_hax(0, 0, MIRROR_DISABLED, light_sprite, light_sprite->data, 0);
 	for (int i = 0; i < game_state.snooper_count; i++) {
-		if (game_state.snoopers[i].status != SNOOPER_STATUS_ALIVE) continue;
+		snooper_state_t *snooper = &game_state.snoopers[i];
+		if (snooper->status != SNOOPER_STATUS_ALIVE) continue;
 
-		// TODO : this doesn't work with the light buffer.
-		// if (!should_render(game_state.snoopers[i].position.x, game_state.snoopers[i].position.y)) continue;
+		float s = sinf(snooper->head_rotation_z);
+		float c = cosf(snooper->head_rotation_z);
 
-		work_transform.position.x = game_state.snoopers[i].position.x;
-		work_transform.position.y = game_state.snoopers[i].position.y;
-		work_transform.rotation_z = game_state.snoopers[i].head_rotation_z;
+		float end_x = snooper->position.x + 6.f * s;
+		float end_y = snooper->position.y + 6.f * c;
+		if (!(
+			should_render(snooper->position.x, snooper->position.y)
+			|| should_render(end_x, end_y)
+		)) {
+			continue;
+		}
+
+		work_transform.position.x = snooper->position.x;
+		work_transform.position.y = snooper->position.y;
+		work_transform.rotation_z = snooper->head_rotation_z;
 		// render_model_positioned(&work_transform.position, &light_model);
 		// TODO : no shade?
 		render_object_transformed_shaded(&work_transform, &light_model);
