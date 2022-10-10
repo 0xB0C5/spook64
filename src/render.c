@@ -11,8 +11,13 @@
 
 #define MAX_MODEL_VERTICES 256
 
+#define LIGHT_SURFACE_WIDTH 64
+#define LIGHT_SURFACE_HEIGHT 32
+
+#define LIGHT_SURFACE_LOG_WIDTH 7
+
 const float camera_z_factor = -0.04f;
-const float camera_w_factor = 0.16f;
+static float camera_w_factor;
 
 float work_positions[4*MAX_MODEL_VERTICES] = {};
 float work_colors[3*MAX_MODEL_VERTICES] = {};
@@ -41,6 +46,7 @@ static float ambient_light_b = 0.35f;
 
 static sprite_t *snooper_sprite;
 static sprite_t *light_sprite;
+static sprite_t light_surface_sprite;
 
 static long long fps_start_tick = 0;
 static int32_t fps_frame_count = 0;
@@ -50,8 +56,19 @@ const uint32_t SCREEN_WIDTH = 320;
 const uint32_t SCREEN_HEIGHT = 240;
 
 surface_t zbuffer;
+surface_t light_surface;
 
 static uint32_t tri_count;
+
+static float half_framebuffer_width;
+static float half_framebuffer_height;
+
+void update_framebuffer_size(surface_t *surf) {
+	half_framebuffer_width = surf->width / 2;
+	half_framebuffer_height = surf->height / 2;
+
+	camera_w_factor = half_framebuffer_width/160.f * 0.16f;
+}
 
 void set_camera_pitch(float camera_pitch) {
 	float sp = sinf(camera_pitch);
@@ -73,6 +90,17 @@ void renderer_init() {
     floor_sprite = sprite_load("rom:/ground.sprite");
 	snooper_sprite = sprite_load("rom:/snooper.sprite");
 	light_sprite = sprite_load("rom:/light.sprite");
+
+	light_surface = surface_alloc(FMT_RGBA16, LIGHT_SURFACE_WIDTH, LIGHT_SURFACE_HEIGHT);
+
+	light_surface_sprite.width = LIGHT_SURFACE_WIDTH;
+	light_surface_sprite.height = LIGHT_SURFACE_HEIGHT;
+	light_surface_sprite.flags = SPRITE_FLAGS_EXT | FMT_IA16;
+	light_surface_sprite.hslices = 1;
+	light_surface_sprite.vslices = 1;
+
+	debugf("snooper sprite flags: %d\n", snooper_sprite->flags);
+	debugf("light surf sprite flags: %d\n", light_surface_sprite.flags);
 
 	zbuffer = surface_alloc(FMT_RGBA16, 320, 240);
 
@@ -114,8 +142,8 @@ void render_model_positioned(const vector3_t *position, const model_t *model) {
 		float w = camera_w_factor / z2;
 		x2 *= w;
 		y2 *= w;
-		x2 += 160.f;
-		y2 = 120.f - y2;
+		x2 += half_framebuffer_width;
+		y2 = half_framebuffer_height - y2;
 
 		// *(out_pos++) = w;
 		*(out_pos++) = x2;
@@ -127,24 +155,29 @@ void render_model_positioned(const vector3_t *position, const model_t *model) {
 	uint16_t *in_tris = model->tris;
 	for (uint16_t i = 0; i < model->tris_len; i += 9) {
 		memcpy(tri_vector_a, work_positions+in_tris[i], 3*sizeof(float));
-		memcpy(tri_vector_a+3, in_texcoords+in_tris[i+1], 2*sizeof(float));
-
 		memcpy(tri_vector_b, work_positions+in_tris[i+3], 3*sizeof(float));
-		memcpy(tri_vector_b+3, in_texcoords+in_tris[i+4], 2*sizeof(float));
-
 		memcpy(tri_vector_c, work_positions+in_tris[i+6], 3*sizeof(float));
-		memcpy(tri_vector_c+3, in_texcoords+in_tris[i+7], 2*sizeof(float));
 
-		if (tri_vector_a[2] < 0.f) continue;
-		if (tri_vector_b[2] < 0.f) continue;
-		if (tri_vector_c[2] < 0.f) continue;
+		float area = (
+			tri_vector_a[0] * tri_vector_b[1]
+			+ tri_vector_b[0] * tri_vector_c[1]
+			+ tri_vector_c[0] * tri_vector_a[1]
+			- tri_vector_a[0] * tri_vector_c[1]
+			- tri_vector_b[0] * tri_vector_a[1]
+			- tri_vector_c[0] * tri_vector_b[1]
+		);
+		if (area <= 0) continue;
+
+		memcpy(tri_vector_a+3, in_texcoords+in_tris[i+1], 2*sizeof(float));
+		memcpy(tri_vector_b+3, in_texcoords+in_tris[i+4], 2*sizeof(float));
+		memcpy(tri_vector_c+3, in_texcoords+in_tris[i+7], 2*sizeof(float));
 
 		// TODO : tex inv w
 		tri_vector_a[5] = 1.0f;
 		tri_vector_b[5] = 1.0f;
 		tri_vector_c[5] = 1.0f;
 
-		rdpq_triangle(
+		rdpq_triangle_cpu(
 			TILE0, // tile
 			0, // mipmaps
 			0, // pos_offset
@@ -191,8 +224,8 @@ void render_object_transformed_shaded(const object_transform_t *transform, const
 		float w = camera_w_factor / z2;
 		x2 *= w;
 		y2 *= w;
-		x2 += 160.f;
-		y2 = 120.f - y2;
+		x2 += half_framebuffer_width;
+		y2 = half_framebuffer_height - y2;
 
 		// *(out_pos++) = w;
 		*(out_pos++) = x2;
@@ -229,15 +262,25 @@ void render_object_transformed_shaded(const object_transform_t *transform, const
 	uint16_t *in_tris = model->tris;
 	for (uint16_t i = 0; i < model->tris_len; i += 9) {
 		memcpy(tri_vector_a, work_positions+in_tris[i], 3*sizeof(float));
-		memcpy(tri_vector_a+3, in_texcoords+in_tris[i+1], 2*sizeof(float));
-		memcpy(tri_vector_a+6, work_colors+in_tris[i+2], 3*sizeof(float));
-
-		memcpy(tri_vector_b, work_positions+in_tris[i+3], 3*sizeof(float));
-		memcpy(tri_vector_b+3, in_texcoords+in_tris[i+4], 2*sizeof(float));
-		memcpy(tri_vector_b+6, work_colors+in_tris[i+5], 3*sizeof(float));
-
 		memcpy(tri_vector_c, work_positions+in_tris[i+6], 3*sizeof(float));
+		memcpy(tri_vector_b, work_positions+in_tris[i+3], 3*sizeof(float));
+
+		float area = (
+			tri_vector_a[0] * tri_vector_b[1]
+			+ tri_vector_b[0] * tri_vector_c[1]
+			+ tri_vector_c[0] * tri_vector_a[1]
+			- tri_vector_a[0] * tri_vector_c[1]
+			- tri_vector_b[0] * tri_vector_a[1]
+			- tri_vector_c[0] * tri_vector_b[1]
+		);
+		if (area <= 0) continue;
+
+		memcpy(tri_vector_a+3, in_texcoords+in_tris[i+1], 2*sizeof(float));
+		memcpy(tri_vector_b+3, in_texcoords+in_tris[i+4], 2*sizeof(float));
 		memcpy(tri_vector_c+3, in_texcoords+in_tris[i+7], 2*sizeof(float));
+
+		memcpy(tri_vector_a+6, work_colors+in_tris[i+2], 3*sizeof(float));
+		memcpy(tri_vector_b+6, work_colors+in_tris[i+5], 3*sizeof(float));
 		memcpy(tri_vector_c+6, work_colors+in_tris[i+8], 3*sizeof(float));
 
 		// TODO : tex inv w
@@ -245,7 +288,7 @@ void render_object_transformed_shaded(const object_transform_t *transform, const
 		tri_vector_b[5] = 1.0f;
 		tri_vector_c[5] = 1.0f;
 
-		rdpq_triangle(
+		rdpq_triangle_cpu(
 			TILE0, // tile
 			0, // mipmaps
 			0, // pos_offset
@@ -366,7 +409,43 @@ bool render() {
 	// Clear the z buffer.
 	clear_z_buffer();
 
+	rdpq_set_color_image(&light_surface);
+	update_framebuffer_size(&light_surface);
+	rdpq_set_mode_fill(RGBA32(0x00, 0x00, 0x20, 0xff));
+	rdpq_fill_rectangle(0, 0, LIGHT_SURFACE_WIDTH, LIGHT_SURFACE_HEIGHT);
+
+	// Render lights
+	rdpq_set_mode_standard();
+
+	rdpq_set_other_modes_raw(SOM_TEXTURE_PERSP | SOM_TF0_RGB);
+	rdpq_change_other_modes_raw(SOM_SAMPLE_MASK, SOM_SAMPLE_BILINEAR);
+	rdpq_change_other_modes_raw(SOM_Z_WRITE, 0);
+	rdpq_change_other_modes_raw(SOM_Z_COMPARE, 0);
+	rdpq_change_other_modes_raw(SOM_AA_ENABLE, SOM_AA_ENABLE);
+	rdpq_mode_mipmap(MIPMAP_NONE, 0);
+
+	rdpq_mode_combiner(RDPQ_COMBINER_TEX);
+	object_transform_t work_transform = {{0.f, 0.f, 0.f}, 0.f};
+	rdpq_mode_blender(RDPQ_BLENDER((IN_RGB, IN_ALPHA, MEMORY_RGB, INV_MUX_ALPHA)));
+	rdpq_sync_load();
+	rdp_load_texture(0, 0, MIRROR_DISABLED, light_sprite);
+	// rdp_load_texture_stride_hax(0, 0, MIRROR_DISABLED, light_sprite, light_sprite->data, 0);
+	for (int i = 0; i < game_state.snooper_count; i++) {
+		if (game_state.snoopers[i].status != SNOOPER_STATUS_ALIVE) continue;
+		if (!should_render(game_state.snoopers[i].position.x, game_state.snoopers[i].position.y)) continue;
+
+		work_transform.position.x = game_state.snoopers[i].position.x;
+		work_transform.position.y = game_state.snoopers[i].position.y;
+		work_transform.rotation_z = game_state.snoopers[i].head_rotation_z;
+		// render_model_positioned(&work_transform.position, &light_model);
+		// TODO : no shade?
+		render_object_transformed_shaded(&work_transform, &light_model);
+	}
+
     rdp_attach(disp);
+	update_framebuffer_size(disp);
+
+	// TODO : set color image to light buffer?
 	rdpq_set_z_image(&zbuffer);
 
 	// Clear the framebuffer.
@@ -397,7 +476,6 @@ bool render() {
 					loaded_sprite = obj_sprite;
 					rdpq_sync_load();
 					rdp_load_texture(0, 0, MIRROR_DISABLED, loaded_sprite);
-					rdpq_sync_load();
 				}
 
 				render_model_positioned(&level_position, &floor_model);
@@ -407,34 +485,39 @@ bool render() {
 		level_position.y -= 2.f;
 	}
 
+	// Black rectangle?
+	/*
+	rdpq_set_mode_standard();
+	rdpq_set_fog_color(RGBA32(0x00, 0x00, 0x00, 0x80));
+	rdpq_mode_blender(RDPQ_BLENDER((FOG_RGB, FOG_ALPHA, MEMORY_RGB, INV_MUX_ALPHA)));
+	rdpq_fill_rectangle(0, 0, 320, 240);
+	rdpq_fill_rectangle(0, 0, 320, 240);
+	rdpq_fill_rectangle(0, 0, 320, 240);
+	*/
+
 	// Render paths
 	// render_graph(game_state.level->path_graph, closest_node);
 
-	// Render lights
 
-	// You can't tell me what to do!
-	/*
-#define _RDPQ_SOM_BLEND2A_A_MEMORY_RGB cast64(1)
-#define _RDPQ_SOM_BLEND2A_B2_ONE cast64(2)
-    rdpq_mode_blender(RDPQ_BLENDER2(
-        (MEMORY_RGB, IN_ALPHA, MEMORY_RGB, ONE),
-        (CYCLE1_RGB, IN_ALPHA, CYCLE1_RGB, ONE)
-    ));
-	*/
-	rdpq_mode_blender(RDPQ_BLENDER((MEMORY_RGB, IN_ALPHA, MEMORY_RGB, ONE)));
-	object_transform_t work_transform = {{0.f, 0.f, 0.f}, 0.f};
+	// Apply lights
 	rdpq_sync_load();
-	rdp_load_texture(0, 0, MIRROR_DISABLED, light_sprite);
-	for (int i = 0; i < game_state.snooper_count; i++) {
-		if (game_state.snoopers[i].status != SNOOPER_STATUS_ALIVE) continue;
-		if (!should_render(game_state.snoopers[i].position.x, game_state.snoopers[i].position.y)) continue;
+	rdpq_sync_pipe();
+	rdpq_set_mode_standard();
+	rdpq_set_prim_color(RGBA32(0, 0, 0, 0xff));
+	rdpq_change_other_modes_raw(SOM_SAMPLE_MASK, SOM_SAMPLE_BILINEAR);
+	rdpq_mode_combiner(RDPQ_COMBINER1((TEX0, 0, PRIM, TEX0), (TEX0, 0, PRIM, TEX0)));
+	rdpq_set_blend_color(RGBA32(0, 0x00, 0x08, 0xff));
+	rdpq_mode_blender(RDPQ_BLENDER((MEMORY_RGB, IN_ALPHA, BLEND_RGB, ONE)));
 
-		work_transform.position.x = game_state.snoopers[i].position.x;
-		work_transform.position.y = game_state.snoopers[i].position.y;
-		work_transform.rotation_z = game_state.snoopers[i].head_rotation_z;
-		// render_model_positioned(&work_transform.position, &light_model);
-		render_object_transformed_shaded(&work_transform, &light_model);
-	}
+	// int y = 0;
+	rdp_load_texture_stride_hax(0, 0, MIRROR_DISABLED, &light_surface_sprite, light_surface.buffer, 0);
+	rdp_draw_sprite_scaled(
+		0,
+		1,
+		1,
+		320.f / LIGHT_SURFACE_WIDTH,
+		241.f / LIGHT_SURFACE_HEIGHT,
+		MIRROR_DISABLED);
 
 	// Render snoopers
 	rdpq_set_mode_standard();

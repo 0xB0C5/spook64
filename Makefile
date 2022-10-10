@@ -32,8 +32,9 @@ filesystem/%.sprite: assets/%.png
 
 filesystem/ground.sprite: MKSPRITE_FLAGS=--format RGBA16 --tiles 64,32
 filesystem/snooper.sprite: MKSPRITE_FLAGS=--format RGBA16 --tiles 32,32
+filesystem/big.sprite: MKSPRITE_FLAGS=--format RGBA16 --tiles 64,32
 
-filesystem/light.sprite: MKSPRITE_FLAGS=--format RGBA32 --tiles 32,32
+filesystem/light.sprite: MKSPRITE_FLAGS=--format RGBA32 --tiles 16,32
 
 $(BUILD_DIR)/spook64.dfs: $(assets_conv)
 $(BUILD_DIR)/spook64.elf: $(src:%.c=$(BUILD_DIR)/%.o)
