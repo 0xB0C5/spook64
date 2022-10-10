@@ -11,9 +11,10 @@
 #define SNOOPER_MIN_Y 0.f
 #define SNOOPER_SPEED 0.05f
 #define SNOOPER_RUN_SPEED 0.4f
-#define SNOOPER_LIGHT_ANGLE (0.15f * M_PI)
-#define SNOOPER_LIGHT_DIST 4.f
-#define SNOOPER_LOOK_DIST 6.f
+#define SNOOPER_LIGHT_ANGLE (0.17f * M_PI)
+#define SNOOPER_LIGHT_MAX_DIST 5.5f
+#define SNOOPER_LIGHT_MIN_DIST 1.f
+#define SNOOPER_LOOK_DIST 8.f
 
 #define SPOOKER_SPEED 0.2f
 
@@ -77,7 +78,8 @@ static size_t get_snooper_light(float x, float y, vector2_t *out) {
 		float dy = y - snooper->position.y;
 
 		float dist2 = dx*dx + dy*dy;
-		if (dist2 > SNOOPER_LIGHT_DIST*SNOOPER_LIGHT_DIST) continue;
+		if (dist2 > SNOOPER_LIGHT_MAX_DIST*SNOOPER_LIGHT_MAX_DIST) continue;
+		if (dist2 < SNOOPER_LIGHT_MIN_DIST*SNOOPER_LIGHT_MIN_DIST) continue;
 
 		float angle = atan2f(dx, dy);
 		float angle_diff = angle - snooper->head_rotation_z;

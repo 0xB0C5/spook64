@@ -17,7 +17,8 @@
 #define LIGHT_SURFACE_LOG_WIDTH 7
 
 const float camera_z_factor = -0.04f;
-static float camera_w_factor;
+static float camera_wx_factor;
+static float camera_wy_factor;
 
 float work_positions[4*MAX_MODEL_VERTICES] = {};
 float work_colors[3*MAX_MODEL_VERTICES] = {};
@@ -67,7 +68,8 @@ void update_framebuffer_size(surface_t *surf) {
 	half_framebuffer_width = surf->width / 2;
 	half_framebuffer_height = surf->height / 2;
 
-	camera_w_factor = half_framebuffer_width/160.f * 0.16f;
+	camera_wx_factor = half_framebuffer_width/160.f * 0.16f;
+	camera_wy_factor = half_framebuffer_height/120.f * 0.16f;
 }
 
 void set_camera_pitch(float camera_pitch) {
@@ -139,9 +141,8 @@ void render_model_positioned(const vector3_t *position, const model_t *model) {
 		float y2 = camera_yy*in_y + camera_yz*in_z;
 		float z2 = camera_zy*in_y + camera_zz*in_z;
 
-		float w = camera_w_factor / z2;
-		x2 *= w;
-		y2 *= w;
+		x2 *= camera_wx_factor / z2;
+		y2 *= camera_wy_factor / z2;
 		x2 += half_framebuffer_width;
 		y2 = half_framebuffer_height - y2;
 
@@ -221,9 +222,8 @@ void render_object_transformed_shaded(const object_transform_t *transform, const
 		float y2 = camera_yy*y1 + camera_yz*z1;
 		float z2 = camera_zy*y1 + camera_zz*z1;
 
-		float w = camera_w_factor / z2;
-		x2 *= w;
-		y2 *= w;
+		x2 *= camera_wx_factor / z2;
+		y2 *= camera_wy_factor / z2;
 		x2 += half_framebuffer_width;
 		y2 = half_framebuffer_height - y2;
 
@@ -314,7 +314,7 @@ static bool should_render(float x, float y) {
 	if (relative_y <= 4.f || relative_y >= 24.f) return false;
 	
 	float screen_z = camera_zy*relative_y;
-	float screen_x = camera_xx*(x-game_state.camera_position.x)*camera_w_factor/screen_z;
+	float screen_x = camera_xx*(x-game_state.camera_position.x)*camera_wx_factor/screen_z;
 
 	return (screen_x > -600.f && screen_x < 600.f);
 }
@@ -421,7 +421,6 @@ bool render() {
 	rdpq_change_other_modes_raw(SOM_SAMPLE_MASK, SOM_SAMPLE_BILINEAR);
 	rdpq_change_other_modes_raw(SOM_Z_WRITE, 0);
 	rdpq_change_other_modes_raw(SOM_Z_COMPARE, 0);
-	// rdpq_change_other_modes_raw(SOM_AA_ENABLE, SOM_AA_ENABLE);
 	rdpq_mode_mipmap(MIPMAP_NONE, 0);
 
 	rdpq_mode_combiner(RDPQ_COMBINER_TEX);
@@ -433,7 +432,9 @@ bool render() {
 	rdp_load_texture_stride_hax(0, 0, MIRROR_DISABLED, light_sprite, light_sprite->data, 0);
 	for (int i = 0; i < game_state.snooper_count; i++) {
 		if (game_state.snoopers[i].status != SNOOPER_STATUS_ALIVE) continue;
-		if (!should_render(game_state.snoopers[i].position.x, game_state.snoopers[i].position.y)) continue;
+
+		// TODO : this doesn't work with the light buffer.
+		// if (!should_render(game_state.snoopers[i].position.x, game_state.snoopers[i].position.y)) continue;
 
 		work_transform.position.x = game_state.snoopers[i].position.x;
 		work_transform.position.y = game_state.snoopers[i].position.y;
@@ -485,16 +486,6 @@ bool render() {
 		}
 		level_position.y -= 2.f;
 	}
-
-	// Black rectangle?
-	/*
-	rdpq_set_mode_standard();
-	rdpq_set_fog_color(RGBA32(0x00, 0x00, 0x00, 0x80));
-	rdpq_mode_blender(RDPQ_BLENDER((FOG_RGB, FOG_ALPHA, MEMORY_RGB, INV_MUX_ALPHA)));
-	rdpq_fill_rectangle(0, 0, 320, 240);
-	rdpq_fill_rectangle(0, 0, 320, 240);
-	rdpq_fill_rectangle(0, 0, 320, 240);
-	*/
 
 	// Render paths
 	// render_graph(game_state.level->path_graph, closest_node);
