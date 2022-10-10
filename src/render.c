@@ -12,9 +12,10 @@
 #define MAX_MODEL_VERTICES 256
 
 #define LIGHT_SURFACE_WIDTH 64
-#define LIGHT_SURFACE_HEIGHT 32
+#define LIGHT_SURFACE_HEIGHT 64
 
-#define LIGHT_SURFACE_LOG_WIDTH 7
+#define LIGHT_SPRITE_VSLICES 2
+
 
 const float camera_z_factor = -0.04f;
 static float camera_wx_factor;
@@ -99,7 +100,7 @@ void renderer_init() {
 	light_surface_sprite.height = LIGHT_SURFACE_HEIGHT;
 	light_surface_sprite.flags = SPRITE_FLAGS_EXT | FMT_IA16;
 	light_surface_sprite.hslices = 1;
-	light_surface_sprite.vslices = 1;
+	light_surface_sprite.vslices = LIGHT_SPRITE_VSLICES;
 
 	debugf("snooper sprite flags: %d\n", snooper_sprite->flags);
 	debugf("light surf sprite flags: %d\n", light_surface_sprite.flags);
@@ -410,7 +411,16 @@ bool render() {
 	clear_z_buffer();
 
 	rdpq_set_color_image(&light_surface);
-	update_framebuffer_size(&light_surface);
+
+	// update_framebuffer_size assumes the surface exactly covers the screen
+	// but it doesn't!
+	// update_framebuffer_size(&light_surface);
+	half_framebuffer_width = 32;
+	half_framebuffer_height = 31;
+
+	camera_wx_factor = 32/160.f * 0.16f;
+	camera_wy_factor = 30/120.f * 0.16f;
+
 	rdpq_set_mode_fill(RGBA32(0x00, 0x00, 0x20, 0xff));
 	rdpq_fill_rectangle(0, 0, LIGHT_SURFACE_WIDTH, LIGHT_SURFACE_HEIGHT);
 
@@ -502,13 +512,31 @@ bool render() {
 
 	// int y = 0;
 	rdp_load_texture_stride_hax(0, 0, MIRROR_DISABLED, &light_surface_sprite, light_surface.buffer, 0);
-	rdp_draw_sprite_scaled(
-		0,
-		1,
-		1,
-		320.f / LIGHT_SURFACE_WIDTH,
-		241.f / LIGHT_SURFACE_HEIGHT,
-		MIRROR_DISABLED);
+	rdpq_texture_rectangle_fx(
+		0, // tile
+		0, // x0
+		0, // y0
+		320*4, // x1
+		120*4, // y1
+		0, //s
+		32, //t
+		1024.f * LIGHT_SURFACE_WIDTH / 320.f, // dsdx
+		1024.f * (60) / 240.f); // dtdy
+
+	rdp_load_texture_stride_hax(
+		0, 0, MIRROR_DISABLED, &light_surface_sprite,
+		light_surface.buffer + (2 * LIGHT_SURFACE_WIDTH * (30)),
+		0);
+	rdpq_texture_rectangle_fx(
+		0, // tile
+		0, // x0
+		120*4, // y0
+		320*4, // x1
+		240*4, // y1
+		0, //s
+		32, //t
+		1024.f * LIGHT_SURFACE_WIDTH / 320.f, // dsdx
+		1024.f * (60) / 240.f); // dtdy
 
 	// Render snoopers
 	rdpq_set_mode_standard();
