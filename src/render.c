@@ -16,7 +16,6 @@
 
 #define LIGHT_SPRITE_VSLICES 2
 
-
 const float camera_z_factor = -0.04f;
 const float camera_w_factor_base = 0.16f;
 static float camera_wx_factor;
@@ -48,7 +47,9 @@ static float ambient_light_g = 0.25f;
 static float ambient_light_b = 0.35f;
 
 static sprite_t *snooper_sprite;
-static sprite_t *light_sprite;
+static sprite_t *snooper_light_sprite;
+static sprite_t *level_light_sprite;
+
 static sprite_t light_surface_sprite;
 
 static long long fps_start_tick = 0;
@@ -86,14 +87,23 @@ void set_camera_pitch(float camera_pitch) {
 }
 
 
-static float line_positions[12] = {};
+static float dynamic_quad_positions[12] = {};
 
 static model_t line_model;
+static model_t level_light_model;
+
+static float level_light_texcoords[] = {
+	0.f, 0.f,
+	63.f, 0.f,
+	0.f, 63.f,
+	63.f, 63.f,
+};
 
 void renderer_init() {
     floor_sprite = sprite_load("rom:/ground.sprite");
 	snooper_sprite = sprite_load("rom:/snooper.sprite");
-	light_sprite = sprite_load("rom:/light.sprite");
+	snooper_light_sprite = sprite_load("rom:/light.sprite");
+	level_light_sprite = sprite_load("rom:/level_light.sprite");
 
 	light_surface = surface_alloc(FMT_RGBA16, LIGHT_SURFACE_WIDTH, LIGHT_SURFACE_HEIGHT);
 
@@ -111,15 +121,25 @@ void renderer_init() {
 	set_camera_pitch(0.8f);
 	graphics_set_default_font();
 
-	line_model.positions_len = ARRAY_LENGTH(line_positions);
+	line_model.positions_len = ARRAY_LENGTH(dynamic_quad_positions);
 	line_model.texcoords_len = floor_model.texcoords_len;
 	line_model.norms_len = floor_model.norms_len;
 	line_model.tris_len = floor_model.tris_len;
 
-	line_model.positions = line_positions;
+	line_model.positions = dynamic_quad_positions;
 	line_model.texcoords = floor_model.texcoords;
 	line_model.norms = floor_model.norms;
 	line_model.tris = floor_model.tris;
+
+	level_light_model.positions_len = ARRAY_LENGTH(dynamic_quad_positions);
+	level_light_model.texcoords_len = ARRAY_LENGTH(level_light_texcoords);
+	level_light_model.norms_len = floor_model.norms_len;
+	level_light_model.tris_len = floor_model.tris_len;
+
+	level_light_model.positions = dynamic_quad_positions;
+	level_light_model.texcoords = level_light_texcoords;
+	level_light_model.norms = floor_model.norms;
+	level_light_model.tris = floor_model.tris;
 }
 
 void render_model_positioned(const vector3_t *position, const model_t *model) {
@@ -439,8 +459,8 @@ bool render() {
 	rdpq_set_blend_color(RGBA32(0, 0, 0xff, 0xff));
 	rdpq_mode_blender(RDPQ_BLENDER((BLEND_RGB, IN_ALPHA, MEMORY_RGB, INV_MUX_ALPHA)));
 	rdpq_sync_load();
-	// rdp_load_texture(0, 0, MIRROR_DISABLED, light_sprite);
-	rdp_load_texture_stride_hax(0, 0, MIRROR_DISABLED, light_sprite, light_sprite->data, 0);
+	// rdp_load_texture(0, 0, MIRROR_DISABLED, snooper_light_sprite);
+	rdp_load_texture_stride_hax(0, 0, MIRROR_DISABLED, snooper_light_sprite, snooper_light_sprite->data, 0);
 	for (int i = 0; i < game_state.snooper_count; i++) {
 		snooper_state_t *snooper = &game_state.snoopers[i];
 		if (snooper->status != SNOOPER_STATUS_ALIVE) continue;
@@ -465,6 +485,27 @@ bool render() {
 		render_object_transformed_shaded(&work_transform, &light_model);
 	}
 
+	rdp_load_texture_stride_hax(0, 0, MIRROR_DISABLED, level_light_sprite, level_light_sprite->data, 0);
+	for (int i = 0; i < game_state.level->light_count; i++) {
+		const level_light_t *light = &game_state.level->lights[i];
+		level_light_model.positions[0] = -light->radius;
+		level_light_model.positions[1] = -light->radius;
+
+		level_light_model.positions[3] = light->radius;
+		level_light_model.positions[4] = -light->radius;
+
+		level_light_model.positions[6] = -light->radius;
+		level_light_model.positions[7] = light->radius;
+
+		level_light_model.positions[9] = light->radius;
+		level_light_model.positions[10] = light->radius;
+
+		work_transform.position.x = light->position.x;
+		work_transform.position.y = light->position.y;
+
+		render_model_positioned(&work_transform.position, &level_light_model);
+	}
+
     rdp_attach(disp);
 	update_framebuffer_size(disp);
 
@@ -472,7 +513,7 @@ bool render() {
 	rdpq_set_z_image(&zbuffer);
 
 	// Clear the framebuffer.
-	rdpq_set_mode_fill(RGBA32(0, 0, 0x20, 0));
+	rdpq_set_mode_fill(RGBA32(0, 0, 0, 0));
 	rdpq_fill_rectangle(0, 0, 320, 240);
 
 	rdpq_set_mode_standard();
@@ -577,7 +618,9 @@ bool render() {
 	// rdp_load_texture(0, 0, MIRROR_DISABLED, spooker_sprite);
 	for (int i = 0; i < game_state.spooker_count; i++) {
 		// render_model_positioned(&game_state.spookers[i].transform.position, &snooper_model);
-		render_object_transformed_shaded(&game_state.spookers[i].transform, &snooper_model);
+		spooker_state_t *spooker = &game_state.spookers[i];
+		if (spooker->knockback_timer < SPOOKER_KNOCKBACK_THRESHOLD && spooker->knockback_timer % 4 >= 2) continue;
+		render_object_transformed_shaded(&spooker->transform, &snooper_model);
 	}
 
 	char info_str[64];

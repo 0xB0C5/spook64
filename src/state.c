@@ -9,14 +9,15 @@
 
 #define SNOOPER_MAX_Y 11.f
 #define SNOOPER_MIN_Y 0.f
-#define SNOOPER_SPEED 0.05f
-#define SNOOPER_RUN_SPEED 0.4f
+#define SNOOPER_SPEED 0.08f
+#define SNOOPER_RUN_SPEED 0.6f
 #define SNOOPER_LIGHT_ANGLE (0.17f * M_PI)
 #define SNOOPER_LIGHT_MAX_DIST 5.5f
 #define SNOOPER_LIGHT_MIN_DIST 1.f
 #define SNOOPER_LOOK_DIST 8.f
 
-#define SPOOKER_SPEED 0.2f
+#define SPOOKER_SPEED 0.35f
+#define SPOOKER_KNOCKBACK_DURATION 30
 
 #define CAMERA_OFFSET_Y -12.f
 #define CAMERA_OFFSET_Z 12.f
@@ -68,7 +69,7 @@ static void spawn_snooper() {
 	}
 }
 
-static size_t get_snooper_light(float x, float y, vector2_t *out) {
+static size_t get_light_at(float x, float y, vector2_t *out) {
 	for (size_t i = 0; i < game_state.snooper_count; i++) {
 		snooper_state_t *snooper = game_state.snoopers + i;
 		if (snooper->status != SNOOPER_STATUS_ALIVE) {
@@ -95,7 +96,28 @@ static size_t get_snooper_light(float x, float y, vector2_t *out) {
 			return i;
 		}
 	}
-	return MAX_SNOOPER_COUNT;
+
+	for (size_t i = 0; i < game_state.level->light_count; i++) {
+		const level_light_t *light = &game_state.level->lights[i];
+
+		float dx = x - light->position.x;
+		float dy = y - light->position.y;
+
+		float dist2 = dx*dx + dy*dy;
+		if (dist2 > light->radius * light->radius) continue;
+
+		if (dist2 < 0.01f) {
+			out->x = 0.f;
+			out->y = -1.f;
+		} else {
+			float dist = sqrtf(dist2);
+			out->x = dx / dist;
+			out->y = dy / dist;
+		}
+		return MAX_SNOOPER_COUNT;
+	}
+
+	return MAX_SNOOPER_COUNT+1;
 }
 
 float step_to_angle(float cur, float target) {
@@ -171,7 +193,7 @@ void state_update() {
 
 			if (snooper->status == SNOOPER_STATUS_ALIVE) {
 				// Look at spooker if nearby and being knocked back.
-				if (game_state.spookers[0].knockback_timer != 0) {
+				if (game_state.spookers[0].knockback_timer >= SPOOKER_KNOCKBACK_THRESHOLD) {
 					vector3_t *spooker_pos = &game_state.spookers[0].transform.position;
 					vector2_t *snooper_pos = &snooper->position;
 					float dx = spooker_pos->x - snooper_pos->x;
@@ -216,24 +238,25 @@ void state_update() {
 	{
 		spooker_state_t *spooker = game_state.spookers;
 		
-		vector2_t light_direction;
-		size_t snooper_light_index = get_snooper_light(
-				spooker->transform.position.x,
-				spooker->transform.position.y,
-				&light_direction);
-		if (snooper_light_index < MAX_SNOOPER_COUNT) {
-			if (spooker->knockback_timer < 50) {
-				sfx_snooper_speak();
+		if (spooker->knockback_timer == 0) {
+			vector2_t light_direction;
+			size_t snooper_light_index = get_light_at(
+					spooker->transform.position.x,
+					spooker->transform.position.y,
+					&light_direction);
+
+			if (snooper_light_index < MAX_SNOOPER_COUNT+1) {
+				if (snooper_light_index < MAX_SNOOPER_COUNT) sfx_snooper_speak();
+				spooker->velocity.x = 0.5f * light_direction.x;
+				spooker->velocity.y = 0.5f * light_direction.y;
+				spooker->knockback_timer = SPOOKER_KNOCKBACK_THRESHOLD + SPOOKER_KNOCKBACK_DURATION;
+				spooker->spook_timer = 0;
+				game_state.snoopers[snooper_light_index].freeze_timer = 120;
+				game_state.snoopers[snooper_light_index].rotate_timer = 1;
 			}
-			spooker->velocity.x = 0.5f * light_direction.x;
-			spooker->velocity.y = 0.5f * light_direction.y;
-			spooker->knockback_timer = 60;
-			spooker->spook_timer = 0;
-			game_state.snoopers[snooper_light_index].freeze_timer = 120;
-			game_state.snoopers[snooper_light_index].rotate_timer = 1;
 		}
 
-		if (spooker->knockback_timer == 0) {
+		if (spooker->knockback_timer < SPOOKER_KNOCKBACK_THRESHOLD) {
 			// TODO : scale down based on bounds of controller x/y?
 			float dx;
 			float dy;
@@ -266,19 +289,19 @@ void state_update() {
 			}
 		} else {
 			// knockback
-			spooker->knockback_timer--;
-
 			spooker->transform.position.x += spooker->velocity.x;
 			spooker->transform.position.y += spooker->velocity.y;
-			spooker->transform.rotation_z += 0.01f * spooker->knockback_timer;
+			spooker->transform.rotation_z += 0.02f * (spooker->knockback_timer - SPOOKER_KNOCKBACK_THRESHOLD);
 
-			spooker->velocity.x *= 0.95f;
-			spooker->velocity.y *= 0.95f;
-			
+			spooker->velocity.x *= 0.92f;
+			spooker->velocity.y *= 0.92f;
+
 			if (spooker->transform.rotation_z > M_PI) {
 				spooker->transform.rotation_z -= 2.f*M_PI;
 			}
 		}
+
+		if (spooker->knockback_timer != 0) spooker->knockback_timer--;
 
 		float spooker_max_x = game_state.level->width-2.f;
 		if (spooker->transform.position.x > spooker_max_x) {
@@ -310,7 +333,7 @@ void state_update() {
 				game_state.snoopers[i].freeze_timer = 5;
 			}
 		}
-		game_state.spookers[0].spook_timer = 30;
+		game_state.spookers[0].spook_timer = 15;
 	}
 
 	// Move camera towards spooker

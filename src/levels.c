@@ -180,8 +180,17 @@ static const path_edge_t level0_path_edges[] = {
 
 static const path_graph_t level0_graph = MAKE_PATH_GRAPH(level0_path_nodes, level0_path_edges);
 
+static const level_light_t level0_lights[] = {
+	{{-12.f,  16.f}, 3.f},
+	{{ -4.f,  16.f}, 3.f},
+	{{  4.f,  16.f}, 3.f},
+	{{ 12.f,  16.f}, 3.f},
+};
+
 const level_t level0 = {
 	17, 17,
 	&level0_graph,
 	level0_data,
+	ARRAY_LENGTH(level0_lights),
+	level0_lights,
 };

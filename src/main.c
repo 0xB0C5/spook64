@@ -11,6 +11,14 @@ model_t *test_models[] = {
 	&floor_model,
 };
 
+void audio_update() {
+	if (audio_can_write()) {    	
+		short *buf = audio_write_begin();
+		mixer_poll(buf, audio_get_buffer_length());
+		audio_write_end();
+	}
+}
+
 int main()
 {
     display_init(RESOLUTION_320x240, DEPTH_16_BPP, 3, GAMMA_NONE, ANTIALIAS_RESAMPLE);
@@ -46,16 +54,31 @@ int main()
 	sfx_init();
 	// show_model_viewer(ARRAY_LENGTH(test_models), test_models, "rom:/test.sprite");
 
+	
+	const uint32_t ticks_per_frame = 1562500LL;
+	const uint32_t max_delay = 156250LL;
+
+	uint32_t last_update = (uint32_t)timer_ticks();
+
     while (1)
     {
-        if (render()) {
-			state_update();
+		// Wait for next frame.
+		uint32_t now;
+		do {
+			audio_update();
+			now = (uint32_t)timer_ticks();
+		} while (now - last_update < ticks_per_frame);
+
+		last_update += ticks_per_frame;
+		if (now - last_update > max_delay) {
+			// Slowdown!
+			last_update = now;
 		}
 
-        if (audio_can_write()) {    	
-            short *buf = audio_write_begin();
-            mixer_poll(buf, audio_get_buffer_length());
-            audio_write_end();
-        }
+        if (render()) {
+			state_update();
+		} else {
+			debugf("skipped render!\n");
+		}
     }
 }
