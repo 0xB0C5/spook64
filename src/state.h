@@ -7,6 +7,7 @@
 
 #define MAX_SNOOPER_COUNT 32
 #define MAX_SPOOKER_COUNT 4
+#define MAX_LEVEL_LIGHT_COUNT 32
 
 #define SPOOKER_KNOCKBACK_THRESHOLD 30
 
@@ -22,8 +23,9 @@ typedef struct {
 	float head_rotation_z;
 	float head_target_rotation_z;
 	path_follower_t path_follower;
-	uint32_t rotate_timer;
-	uint32_t freeze_timer;
+	uint16_t rotate_timer;
+	uint16_t freeze_timer;
+	uint16_t light_brightness;
 	snooper_status_t status;
 } snooper_state_t;
 
@@ -35,11 +37,27 @@ typedef struct {
 } spooker_state_t;
 
 typedef struct {
+	uint16_t timer;
+} blink_state_t;
+
+typedef union {
+	blink_state_t blink;
+} level_light_type_state_t;
+
+typedef struct {
+	uint16_t brightness;
+	bool is_on;
+	level_light_type_state_t type_state;
+} level_light_state_t;
+
+typedef struct {
 	uint16_t snooper_count;
 	uint16_t spooker_count;
 
 	snooper_state_t snoopers[MAX_SNOOPER_COUNT];
 	spooker_state_t spookers[MAX_SPOOKER_COUNT];
+
+	level_light_state_t light_states[MAX_LEVEL_LIGHT_COUNT];
 
 	vector3_t camera_position;
 
@@ -47,6 +65,7 @@ typedef struct {
 	
 	const level_t *level;
 } game_state_t;
+
 
 extern game_state_t game_state;
 void state_init(const level_t *level);

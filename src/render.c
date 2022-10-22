@@ -113,9 +113,6 @@ void renderer_init() {
 	light_surface_sprite.hslices = 1;
 	light_surface_sprite.vslices = LIGHT_SPRITE_VSLICES;
 
-	debugf("snooper sprite flags: %d\n", snooper_sprite->flags);
-	debugf("light surf sprite flags: %d\n", light_surface_sprite.flags);
-
 	zbuffer = surface_alloc(FMT_RGBA16, 320, 240);
 
 	set_camera_pitch(0.8f);
@@ -168,7 +165,6 @@ void render_model_positioned(const vector3_t *position, const model_t *model) {
 		x2 += half_framebuffer_width;
 		y2 = half_framebuffer_height - y2;
 
-		// *(out_pos++) = w;
 		*(out_pos++) = x2;
 		*(out_pos++) = y2;
 		*(out_pos++) = z2;
@@ -195,10 +191,9 @@ void render_model_positioned(const vector3_t *position, const model_t *model) {
 		memcpy(tri_vector_b+3, in_texcoords+in_tris[i+4], 2*sizeof(float));
 		memcpy(tri_vector_c+3, in_texcoords+in_tris[i+7], 2*sizeof(float));
 
-		// TODO : tex inv w
-		tri_vector_a[5] = 1.0f;
-		tri_vector_b[5] = 1.0f;
-		tri_vector_c[5] = 1.0f;
+		tri_vector_a[5] = 1.f / tri_vector_a[2];
+		tri_vector_b[5] = 1.f / tri_vector_b[2];
+		tri_vector_c[5] = 1.f / tri_vector_c[2];
 
 		rdpq_triangle_cpu(
 			TILE0, // tile
@@ -305,10 +300,9 @@ void render_object_transformed_shaded(const object_transform_t *transform, const
 		memcpy(tri_vector_b+6, work_colors+in_tris[i+5], 3*sizeof(float));
 		memcpy(tri_vector_c+6, work_colors+in_tris[i+8], 3*sizeof(float));
 
-		// TODO : tex inv w
-		tri_vector_a[5] = 1.0f;
-		tri_vector_b[5] = 1.0f;
-		tri_vector_c[5] = 1.0f;
+		tri_vector_a[5] = 1.f / tri_vector_a[2];
+		tri_vector_b[5] = 1.f / tri_vector_b[2];
+		tri_vector_c[5] = 1.f / tri_vector_c[2];
 
 		rdpq_triangle_cpu(
 			TILE0, // tile
@@ -448,16 +442,17 @@ bool render() {
 	// Render lights
 	rdpq_set_mode_standard();
 
-	rdpq_set_other_modes_raw(SOM_TEXTURE_PERSP | SOM_TF0_RGB);
+	// rdpq_set_other_modes_raw(SOM_TF0_RGB);
 	rdpq_change_other_modes_raw(SOM_SAMPLE_MASK, SOM_SAMPLE_BILINEAR);
 	rdpq_change_other_modes_raw(SOM_Z_WRITE, 0);
 	rdpq_change_other_modes_raw(SOM_Z_COMPARE, 0);
-	rdpq_mode_mipmap(MIPMAP_NONE, 0);
 
-	rdpq_mode_combiner(RDPQ_COMBINER_TEX);
+	rdpq_mode_combiner(RDPQ_COMBINER_TEX_FLAT);
 	object_transform_t work_transform = {{0.f, 0.f, 0.f}, 0.f};
 	rdpq_set_blend_color(RGBA32(0, 0, 0xff, 0xff));
 	rdpq_mode_blender(RDPQ_BLENDER((BLEND_RGB, IN_ALPHA, MEMORY_RGB, INV_MUX_ALPHA)));
+	rdpq_mode_persp(true);
+	rdpq_mode_mipmap(MIPMAP_NONE, 0);
 	rdpq_sync_load();
 	// rdp_load_texture(0, 0, MIRROR_DISABLED, snooper_light_sprite);
 	rdp_load_texture_stride_hax(0, 0, MIRROR_DISABLED, snooper_light_sprite, snooper_light_sprite->data, 0);
@@ -480,14 +475,30 @@ bool render() {
 		work_transform.position.x = snooper->position.x;
 		work_transform.position.y = snooper->position.y;
 		work_transform.rotation_z = snooper->head_rotation_z;
+
+		rdpq_set_prim_color(RGBA32(0xff, 0xff, 0xff, snooper->light_brightness * 255 / 100));
+
 		// render_model_positioned(&work_transform.position, &light_model);
 		// TODO : no shade?
 		render_object_transformed_shaded(&work_transform, &light_model);
 	}
 
+	rdpq_sync_load();
 	rdp_load_texture_stride_hax(0, 0, MIRROR_DISABLED, level_light_sprite, level_light_sprite->data, 0);
 	for (int i = 0; i < game_state.level->light_count; i++) {
 		const level_light_t *light = &game_state.level->lights[i];
+		work_transform.position.x = light->position.x;
+		work_transform.position.y = light->position.y;
+
+		if (!(
+			should_render(work_transform.position.x - light->radius, work_transform.position.y - light->radius)
+			|| should_render(work_transform.position.x + light->radius, work_transform.position.y - light->radius)
+			|| should_render(work_transform.position.x - light->radius, work_transform.position.y + light->radius)
+			|| should_render(work_transform.position.x + light->radius, work_transform.position.y + light->radius)
+		)) {
+			continue;
+		}
+
 		level_light_model.positions[0] = -light->radius;
 		level_light_model.positions[1] = -light->radius;
 
@@ -500,9 +511,7 @@ bool render() {
 		level_light_model.positions[9] = light->radius;
 		level_light_model.positions[10] = light->radius;
 
-		work_transform.position.x = light->position.x;
-		work_transform.position.y = light->position.y;
-
+		rdpq_set_prim_color(RGBA32(0xff, 0xff, 0xff, game_state.light_states[i].brightness*255/100));
 		render_model_positioned(&work_transform.position, &level_light_model);
 	}
 
@@ -517,7 +526,7 @@ bool render() {
 	rdpq_fill_rectangle(0, 0, 320, 240);
 
 	rdpq_set_mode_standard();
-	rdpq_set_other_modes_raw(SOM_TEXTURE_PERSP | SOM_TF0_RGB);
+	rdpq_mode_persp(true);
 	rdpq_change_other_modes_raw(SOM_SAMPLE_MASK, SOM_SAMPLE_BILINEAR);
 	// rdpq_change_other_modes_raw(SOM_AA_ENABLE, SOM_AA_ENABLE);
 	rdpq_mode_mipmap(MIPMAP_NONE, 0);
@@ -553,7 +562,6 @@ bool render() {
 	// render_graph(game_state.level->path_graph, closest_node);
 
 	// Apply lights
-	rdpq_sync_load();
 	rdpq_sync_pipe();
 	rdpq_set_mode_standard();
 	rdpq_set_prim_color(RGBA32(0, 0, 0, 0xff));
@@ -563,6 +571,7 @@ bool render() {
 	rdpq_mode_blender(RDPQ_BLENDER((MEMORY_RGB, IN_ALPHA, BLEND_RGB, ONE)));
 
 	// int y = 0;
+	rdpq_sync_load();
 	rdp_load_texture_stride_hax(0, 0, MIRROR_DISABLED, &light_surface_sprite, light_surface.buffer, 0);
 	rdpq_texture_rectangle_fx(
 		0, // tile
@@ -575,6 +584,7 @@ bool render() {
 		1024.f * LIGHT_SURFACE_WIDTH / 320.f, // dsdx
 		1024.f * (60) / 240.f); // dtdy
 
+	rdpq_sync_load();
 	rdp_load_texture_stride_hax(
 		0, 0, MIRROR_DISABLED, &light_surface_sprite,
 		light_surface.buffer + (2 * LIGHT_SURFACE_WIDTH * (30)),

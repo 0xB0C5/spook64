@@ -50,6 +50,20 @@ void state_init(const level_t *level) {
 	game_state.level = level;
 
 	path_set_graph(level->path_graph);
+
+	for (int i = 0; i < game_state.level->light_count; i++) {
+		switch (game_state.level->lights[i].type) {
+			case LIGHT_TYPE_STATIC:
+				game_state.light_states[i].brightness = 90;
+				game_state.light_states[i].is_on = 1;
+				break;
+			case LIGHT_TYPE_BLINK:
+				game_state.light_states[i].brightness = 0;
+				game_state.light_states[i].is_on = 0;
+				game_state.light_states[i].type_state.blink.timer = 120 + RANDN(240);
+				break;
+		}
+	}
 }
 
 static void spawn_snooper() {
@@ -66,6 +80,8 @@ static void spawn_snooper() {
 
 		new_snooper->rotate_timer = 1;
 		new_snooper->freeze_timer = 0;
+
+		new_snooper->light_brightness = 0;
 	}
 }
 
@@ -98,13 +114,16 @@ static size_t get_light_at(float x, float y, vector2_t *out) {
 	}
 
 	for (size_t i = 0; i < game_state.level->light_count; i++) {
+		if (!game_state.light_states[i].is_on) continue;
+
 		const level_light_t *light = &game_state.level->lights[i];
 
 		float dx = x - light->position.x;
 		float dy = y - light->position.y;
 
 		float dist2 = dx*dx + dy*dy;
-		if (dist2 > light->radius * light->radius) continue;
+		float hit_radius = 0.8f * light->radius;
+		if (dist2 > hit_radius * hit_radius) continue;
 
 		if (dist2 < 0.01f) {
 			out->x = 0.f;
@@ -139,6 +158,15 @@ float step_to_angle(float cur, float target) {
 }
 
 
+void update_light_brightness(uint16_t *brightness) {
+	if (*brightness < 85) {
+		*brightness += RANDN(20);
+	} else {
+		*brightness += RANDN(5) - 2;
+		if (*brightness > 100) *brightness = 100;
+	}
+}
+
 void state_update() {
 	// Spawn snooper?
 	game_state.snooper_timer--;
@@ -151,6 +179,8 @@ void state_update() {
 	// Move snoopers
 	for (uint16_t i = 0; i < game_state.snooper_count; i++) {
 		snooper_state_t *snooper = game_state.snoopers + i;
+
+		update_light_brightness(&snooper->light_brightness);
 
 		float speed = snooper->status == SNOOPER_STATUS_ALIVE ? SNOOPER_SPEED : -SNOOPER_RUN_SPEED;
 		if (snooper->freeze_timer != 0) {
@@ -237,7 +267,7 @@ void state_update() {
 	// Move spooker
 	{
 		spooker_state_t *spooker = game_state.spookers;
-		
+
 		if (spooker->knockback_timer == 0) {
 			vector2_t light_direction;
 			size_t snooper_light_index = get_light_at(
@@ -367,5 +397,41 @@ void state_update() {
 
 		game_state.camera_position.x = 0.75f * game_state.camera_position.x + 0.25f*target_x;
 		game_state.camera_position.y = 0.75f * game_state.camera_position.y + 0.25f*target_y;
+	}
+
+	// Update level lights
+	for (int i = 0; i < game_state.level->light_count; i++) {
+		level_light_state_t *light_state = &game_state.light_states[i];
+		switch (game_state.level->lights[i].type) {
+			case LIGHT_TYPE_STATIC:
+				update_light_brightness(&light_state->brightness);
+				break;
+			case LIGHT_TYPE_BLINK:
+				if (light_state->type_state.blink.timer == 0) {
+					light_state->is_on = !light_state->is_on;
+					light_state->type_state.blink.timer = 90 + RANDN(240);
+				}
+				light_state->type_state.blink.timer--;
+
+				if (!light_state->is_on && light_state->type_state.blink.timer < 32) {
+					light_state->brightness = RANDN(50);
+				} else if (light_state->is_on) {
+					if (light_state->brightness < 50) light_state->brightness = 50;
+					update_light_brightness(&light_state->brightness);
+				} else if (light_state->brightness) {
+					if (light_state->type_state.blink.timer & 1) {
+						light_state->brightness -= 30;
+						if (light_state->brightness > 100) {
+							light_state->brightness = 0;
+						}
+					} else {
+						light_state->brightness += 15;
+						if (light_state->brightness > 75) {
+							light_state->brightness = 75;
+						}
+					}
+				}
+				break;
+		}
 	}
 }

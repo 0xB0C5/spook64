@@ -181,10 +181,16 @@ static const path_edge_t level0_path_edges[] = {
 static const path_graph_t level0_graph = MAKE_PATH_GRAPH(level0_path_nodes, level0_path_edges);
 
 static const level_light_t level0_lights[] = {
-	{{-12.f,  16.f}, 3.f},
-	{{ -4.f,  16.f}, 3.f},
-	{{  4.f,  16.f}, 3.f},
-	{{ 12.f,  16.f}, 3.f},
+	{{-12.f,  16.f}, 3.f, LIGHT_TYPE_STATIC},
+	{{ -4.f,  16.f}, 3.f, LIGHT_TYPE_STATIC},
+	{{  4.f,  16.f}, 3.f, LIGHT_TYPE_STATIC},
+	{{ 12.f,  16.f}, 3.f, LIGHT_TYPE_STATIC},
+	{{ 0.f,  1.f}, 5.f, LIGHT_TYPE_BLINK},
+	{{ -8.f,  12.f}, 6.f, LIGHT_TYPE_BLINK},
+	{{ 8.f,  12.f}, 6.f, LIGHT_TYPE_BLINK},
+	{{ -11.f,  0.f}, 5.f, LIGHT_TYPE_BLINK},
+	{{ 11.f,  0.f}, 5.f, LIGHT_TYPE_BLINK},
+	{{ 0.f,  -10.f}, 7.f, LIGHT_TYPE_BLINK},
 };
 
 const level_t level0 = {

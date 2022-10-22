@@ -1,20 +1,22 @@
-iframes so you can't get stuck indefinitely.
-
 scoring
 spawn rate tuning
+
+more spooker sounds.
+
+More level geometry
+
+more levels
 level advancing
 
-level design
-
-Level geometry
 Snooper model & animations
 Spooker model & animations
 
 
 Music
 
-Level lights
-Optimize Rendering
-Shadows?
+Clip lights at walls
+light up walls
+
+Optimize Rendering?
 
 Menus

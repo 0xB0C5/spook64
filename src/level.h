@@ -3,9 +3,15 @@
 #include "path.h"
 #include "dragon.h"
 
+typedef enum {
+	LIGHT_TYPE_STATIC=0,
+	LIGHT_TYPE_BLINK=1,
+} light_type_t;
+
 typedef struct {
 	vector2_t position;
 	float radius;
+	light_type_t type;
 } level_light_t;
 
 typedef struct {
