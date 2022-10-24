@@ -49,9 +49,9 @@ int main()
 		| C1_FCR31_FS);
 
 	renderer_init();
-	state_init(&level0);
-
 	sfx_init();
+	state_init();
+
 	// show_model_viewer(ARRAY_LENGTH(test_models), test_models, "rom:/test.sprite");
 
 	

@@ -22,7 +22,7 @@
 #define CAMERA_OFFSET_Y -12.f
 #define CAMERA_OFFSET_Z 12.f
 
-#define C_CAMERA_OFFSET 6.f
+#define C_CAMERA_OFFSET 7.f
 
 #define CAMERA_BOUNDS_X 4.f
 #define CAMERA_BOUNDS_MAX_Y 6.f
@@ -30,11 +30,12 @@
 
 game_state_t game_state;
 
-void state_init(const level_t *level) {
+void load_level(const level_t *level) {
 	game_state.spooker_count = 1;
 	game_state.spookers[0].transform.position.x = 0.f;
 	game_state.spookers[0].transform.position.y = 0.f;
 	game_state.spookers[0].transform.position.z = 0.f;
+	game_state.spookers[0].transform.rotation_z = 0.f;
 	game_state.spookers[0].velocity.x = 0.f;
 	game_state.spookers[0].velocity.y = 0.f;
 	game_state.spookers[0].knockback_timer = 0;
@@ -47,7 +48,12 @@ void state_init(const level_t *level) {
 
 	game_state.snooper_timer = 1;
 
+	game_state.score = 0;
+	game_state.snooper_death_count = 0;
+
 	game_state.level = level;
+
+	game_state.result = GAME_RESULT_NONE;
 
 	path_set_graph(level->path_graph);
 
@@ -60,10 +66,16 @@ void state_init(const level_t *level) {
 			case LIGHT_TYPE_BLINK:
 				game_state.light_states[i].brightness = 0;
 				game_state.light_states[i].is_on = 0;
-				game_state.light_states[i].type_state.blink.timer = 120 + RANDN(240);
+				game_state.light_states[i].type_state.blink.timer = 240 + RANDN(240);
 				break;
 		}
 	}
+
+	sfx_start_music();
+}
+
+void state_init() {
+	load_level(&level0);
 }
 
 static void spawn_snooper() {
@@ -168,6 +180,27 @@ void update_light_brightness(uint16_t *brightness) {
 }
 
 void state_update() {
+	controller_scan();
+	struct controller_data ckeys = get_keys_held();
+
+	if (game_state.result != GAME_RESULT_NONE) {
+		if (ckeys.c[0].start) {
+			load_level(game_state.level);
+		}
+		return;
+	}
+
+	if (game_state.score >= game_state.level->score_target) {
+		game_state.result = GAME_RESULT_WIN;
+		sfx_win();
+		return;
+	}
+	if (game_state.snooper_death_count >= game_state.level->snooper_death_cap) {
+		game_state.result = GAME_RESULT_LOSE;
+		sfx_lose();
+		return;
+	}
+
 	// Spawn snooper?
 	game_state.snooper_timer--;
 	if (game_state.snooper_count == 0 || game_state.snooper_timer == 0) {
@@ -180,6 +213,17 @@ void state_update() {
 	for (uint16_t i = 0; i < game_state.snooper_count; i++) {
 		snooper_state_t *snooper = game_state.snoopers + i;
 
+		if (snooper->status == SNOOPER_STATUS_DYING) {
+			if (++snooper->freeze_timer == SNOOPER_DIE_DURATION) {
+				snooper->status = SNOOPER_STATUS_DEAD;
+				sfx_bad();
+				game_state.snooper_death_count++;
+			}
+			snooper->position.y -= SNOOPER_SPEED;
+
+			continue;
+		}
+
 		update_light_brightness(&snooper->light_brightness);
 
 		float speed = snooper->status == SNOOPER_STATUS_ALIVE ? SNOOPER_SPEED : -SNOOPER_RUN_SPEED;
@@ -190,7 +234,15 @@ void state_update() {
 		bool end = path_follow(&snooper->path_follower, speed);
 
 		if (end) {
-			snooper->status = SNOOPER_STATUS_DEAD;
+			if (snooper->status == SNOOPER_STATUS_ALIVE) {
+				sfx_snooper_die();
+				snooper->status = SNOOPER_STATUS_DYING;
+				snooper->freeze_timer = 0;
+			} else if (snooper->status == SNOOPER_STATUS_SPOOKED) {
+				sfx_point();
+				game_state.score++;
+				snooper->status = SNOOPER_STATUS_DEAD;
+			}
 			continue;
 		}
 		float dx = snooper->path_follower.position.x - snooper->position.x;
@@ -261,9 +313,6 @@ void state_update() {
 		game_state.snooper_count = i;
 	}
 
-	controller_scan();
-	struct controller_data ckeys = get_keys_held();
-
 	// Move spooker
 	{
 		spooker_state_t *spooker = game_state.spookers;
@@ -276,6 +325,7 @@ void state_update() {
 					&light_direction);
 
 			if (snooper_light_index < MAX_SNOOPER_COUNT+1) {
+				sfx_spooker_oof();
 				if (snooper_light_index < MAX_SNOOPER_COUNT) sfx_snooper_speak();
 				spooker->velocity.x = 0.5f * light_direction.x;
 				spooker->velocity.y = 0.5f * light_direction.y;
@@ -347,6 +397,10 @@ void state_update() {
 		if (spooker->transform.position.y < -spooker_max_y) {
 			spooker->transform.position.y = -spooker_max_y;
 		}
+
+		float spook_progress = spooker->spook_timer / 15.f;
+		float spook_height = 0.8f * spook_progress * spook_progress;
+		spooker->transform.position.z = 0.5f * spooker->transform.position.z + 0.5f * spook_height;
 	}
 
 	if (ckeys.c[0].A && game_state.spookers[0].spook_timer == 0 && game_state.spookers[0].knockback_timer == 0) {
@@ -409,7 +463,11 @@ void state_update() {
 			case LIGHT_TYPE_BLINK:
 				if (light_state->type_state.blink.timer == 0) {
 					light_state->is_on = !light_state->is_on;
-					light_state->type_state.blink.timer = 90 + RANDN(240);
+					if (light_state->is_on) {
+						light_state->type_state.blink.timer = 90 + RANDN(120);
+					} else {
+						light_state->type_state.blink.timer = 360 + RANDN(360);
+					}
 				}
 				light_state->type_state.blink.timer--;
 

@@ -18,6 +18,9 @@ typedef struct {
 	const uint16_t width;
 	const uint16_t height;
 
+	const uint16_t score_target;
+	const uint16_t snooper_death_cap;
+
 	const path_graph_t *path_graph;
 
 	const uint8_t *data;

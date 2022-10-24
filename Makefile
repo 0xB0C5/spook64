@@ -31,8 +31,13 @@ filesystem/%.sprite: assets/%.png
 	@$(N64_MKSPRITE) $(MKSPRITE_FLAGS) -o filesystem "$<"
 
 filesystem/ground.sprite: MKSPRITE_FLAGS=--format RGBA16 --tiles 64,32
+filesystem/wall.sprite: MKSPRITE_FLAGS=--format RGBA16 --tiles 64,32
+filesystem/roof.sprite: MKSPRITE_FLAGS=--format RGBA16 --tiles 64,32
 filesystem/snooper.sprite: MKSPRITE_FLAGS=--format RGBA16 --tiles 32,32
-filesystem/big.sprite: MKSPRITE_FLAGS=--format RGBA16 --tiles 64,32
+filesystem/spooker1.sprite: MKSPRITE_FLAGS=--format RGBA16 --tiles 32,32
+filesystem/numbers.sprite: MKSPRITE_FLAGS=--format RGBA16 --tiles 64,32
+filesystem/win.sprite: MKSPRITE_FLAGS=--format RGBA16 --tiles 32,32
+filesystem/lose.sprite: MKSPRITE_FLAGS=--format RGBA16 --tiles 32,32
 
 filesystem/light.sprite: MKSPRITE_FLAGS=--format IA8 --tiles 32,64
 filesystem/level_light.sprite: MKSPRITE_FLAGS=--format IA8 --tiles 64,64

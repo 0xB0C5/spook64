@@ -6,6 +6,7 @@
 #include "sprites.h"
 #include "debug.h"
 #include "libdragon_hax.h"
+#include "light.h"
 
 #include "path.h"
 
@@ -15,6 +16,11 @@
 #define LIGHT_SURFACE_HEIGHT 64
 
 #define LIGHT_SPRITE_VSLICES 2
+
+#define SCORE_X 80
+#define SCORE_Y 4
+
+#define DEATH_X 170
 
 const float camera_z_factor = -0.04f;
 const float camera_w_factor_base = 0.16f;
@@ -47,8 +53,13 @@ static float ambient_light_g = 0.25f;
 static float ambient_light_b = 0.35f;
 
 static sprite_t *snooper_sprite;
+static sprite_t *spooker_sprite;
 static sprite_t *snooper_light_sprite;
 static sprite_t *level_light_sprite;
+static sprite_t *roof_sprite;
+static sprite_t *numbers_sprite;
+static sprite_t *win_sprite;
+static sprite_t *lose_sprite;
 
 static sprite_t light_surface_sprite;
 
@@ -101,9 +112,15 @@ static float level_light_texcoords[] = {
 
 void renderer_init() {
     floor_sprite = sprite_load("rom:/ground.sprite");
+    wall_sprite = sprite_load("rom:/wall.sprite");
+    roof_sprite = sprite_load("rom:/roof.sprite");
 	snooper_sprite = sprite_load("rom:/snooper.sprite");
+	spooker_sprite = sprite_load("rom:/spooker1.sprite");
+	numbers_sprite = sprite_load("rom:/numbers.sprite");
 	snooper_light_sprite = sprite_load("rom:/light.sprite");
 	level_light_sprite = sprite_load("rom:/level_light.sprite");
+	win_sprite = sprite_load("rom:/win.sprite");
+	lose_sprite = sprite_load("rom:/lose.sprite");
 
 	light_surface = surface_alloc(FMT_RGBA16, LIGHT_SURFACE_WIDTH, LIGHT_SURFACE_HEIGHT);
 
@@ -195,7 +212,7 @@ void render_model_positioned(const vector3_t *position, const model_t *model) {
 		tri_vector_b[5] = 1.f / tri_vector_b[2];
 		tri_vector_c[5] = 1.f / tri_vector_c[2];
 
-		rdpq_triangle_cpu(
+		rdpq_triangle(
 			TILE0, // tile
 			0, // mipmaps
 			0, // pos_offset
@@ -304,7 +321,7 @@ void render_object_transformed_shaded(const object_transform_t *transform, const
 		tri_vector_b[5] = 1.f / tri_vector_b[2];
 		tri_vector_c[5] = 1.f / tri_vector_c[2];
 
-		rdpq_triangle_cpu(
+		rdpq_triangle(
 			TILE0, // tile
 			0, // mipmaps
 			0, // pos_offset
@@ -398,6 +415,54 @@ void render_graph(const path_graph_t *graph, int16_t closest_node) {
 	}
 }
 
+void render_wall(uint8_t d, vector3_t *position) {
+	if (d & 2) {
+		render_model_positioned(position, &wall_model);
+	}
+	if (d & 4) {
+		render_model_positioned(position, &wall_left_model);
+	}
+	if (d & 8) {
+		render_model_positioned(position, &wall_right_model);
+	}
+}
+
+void render_roof(uint8_t d, vector3_t *position) {
+	if (d & 16) {
+		render_model_positioned(position, &roof_model);
+	}
+}
+
+void render_floor(uint8_t d, vector3_t *position) {
+	if (d & 1) {
+		render_model_positioned(position, &floor_model);
+	}
+}
+
+void foreach_level_element(void (func)(uint8_t, vector3_t*)) {
+	vector3_t level_position;
+	level_position.z = 0.f;
+	level_position.y = game_state.level->height - 1;
+	const uint8_t *data = game_state.level->data;
+	for (uint16_t y = 0; y < game_state.level->height; y++) {
+		level_position.x = -game_state.level->width + 1;
+		for (uint16_t x = 0; x < game_state.level->width; x++) {
+			uint8_t d = *(data++);
+			if (should_render(level_position.x, level_position.y)) {
+				func(d, &level_position);
+			}
+			level_position.x += 2.f;
+		}
+		level_position.y -= 2.f;
+	}
+}
+
+void render_digit(int x, int y, int digit) {
+	float s = (digit % 8) * 8.f;
+	float t = (digit / 8) * 16.f;
+	rdpq_texture_rectangle(0, x, y, x + 8, y + 16, s, t, 1.f, 1.f);
+}
+
 bool render() {
     surface_t *disp = display_lock();
     if (!disp)
@@ -406,6 +471,7 @@ bool render() {
     }
 
 	tri_count = 0;
+	/*
 	int16_t closest_node = -1;
 	{
 		const vector3_t *spooker_position = &game_state.spookers[0].transform.position;
@@ -421,6 +487,7 @@ bool render() {
 			}
 		}
 	}
+	*/
 
 	// Clear the z buffer.
 	clear_z_buffer();
@@ -444,8 +511,7 @@ bool render() {
 
 	// rdpq_set_other_modes_raw(SOM_TF0_RGB);
 	rdpq_change_other_modes_raw(SOM_SAMPLE_MASK, SOM_SAMPLE_BILINEAR);
-	rdpq_change_other_modes_raw(SOM_Z_WRITE, 0);
-	rdpq_change_other_modes_raw(SOM_Z_COMPARE, 0);
+	rdpq_mode_zbuf(false, false);
 
 	rdpq_mode_combiner(RDPQ_COMBINER_TEX_FLAT);
 	object_transform_t work_transform = {{0.f, 0.f, 0.f}, 0.f};
@@ -525,6 +591,7 @@ bool render() {
 	rdpq_set_mode_fill(RGBA32(0, 0, 0, 0));
 	rdpq_fill_rectangle(0, 0, 320, 240);
 
+	// Render floor
 	rdpq_set_mode_standard();
 	rdpq_mode_persp(true);
 	rdpq_change_other_modes_raw(SOM_SAMPLE_MASK, SOM_SAMPLE_BILINEAR);
@@ -533,30 +600,9 @@ bool render() {
 
 	rdpq_mode_combiner(RDPQ_COMBINER_TEX);
 
-	// Render level
-	vector3_t level_position;
-	level_position.z = 0.f;
-	level_position.y = game_state.level->height - 1;
-	sprite_t *loaded_sprite = NULL;
-	const uint8_t *data = game_state.level->data;
-	for (uint16_t y = 0; y < game_state.level->height; y++) {
-		level_position.x = -game_state.level->width + 1;
-		for (uint16_t x = 0; x < game_state.level->width; x++) {
-			uint8_t d = *(data++);
-			if (d && should_render(level_position.x, level_position.y)) {
-				sprite_t *obj_sprite = floor_sprite;
-				if (obj_sprite != loaded_sprite) {
-					loaded_sprite = obj_sprite;
-					rdpq_sync_load();
-					rdp_load_texture(0, 0, MIRROR_DISABLED, loaded_sprite);
-				}
-
-				render_model_positioned(&level_position, &floor_model);
-			}
-			level_position.x += 2.f;
-		}
-		level_position.y -= 2.f;
-	}
+	rdpq_sync_load();
+	rdp_load_texture(0, 0, MIRROR_DISABLED, floor_sprite);
+	foreach_level_element(render_floor);
 
 	// Render paths
 	// render_graph(game_state.level->path_graph, closest_node);
@@ -600,37 +646,120 @@ bool render() {
 		1024.f * LIGHT_SURFACE_WIDTH / 320.f, // dsdx
 		1024.f * (60) / 240.f); // dtdy
 
-	// Render snoopers
+	// Render walls
 	rdpq_set_mode_standard();
-	rdpq_mode_combiner(RDPQ_COMBINER_TEX_SHADE);
-	rdpq_set_other_modes_raw(SOM_TEXTURE_PERSP);
+	rdpq_mode_persp(true);
 	rdpq_change_other_modes_raw(SOM_SAMPLE_MASK, SOM_SAMPLE_BILINEAR);
-	rdpq_change_other_modes_raw(SOM_Z_WRITE, SOM_Z_WRITE);
-	rdpq_change_other_modes_raw(SOM_Z_COMPARE, SOM_Z_COMPARE);
-	rdpq_change_other_modes_raw(SOM_TF_MASK, SOM_TF0_RGB);
-	rdpq_mode_blender(RDPQ_BLENDER((IN_RGB, IN_ALPHA, IN_RGB, INV_MUX_ALPHA)));
+	rdpq_mode_zbuf(true, true);
+	// rdpq_change_other_modes_raw(SOM_AA_ENABLE, SOM_AA_ENABLE);
 	rdpq_mode_mipmap(MIPMAP_NONE, 0);
 
+	rdpq_mode_combiner(RDPQ_COMBINER_TEX_FLAT);
+
+	rdpq_set_prim_color(RGBA32(0x20, 0x20, 0x20, 0xff));
+
+	rdpq_sync_load();
+	rdp_load_texture(0, 0, MIRROR_DISABLED, wall_sprite);
+	foreach_level_element(render_wall);
+
+	rdpq_sync_load();
+	rdp_load_texture(0, 0, MIRROR_DISABLED, roof_sprite);
+	foreach_level_element(render_roof);
+
+	// Render spooker outlines
+	rdpq_set_mode_standard();
+	rdpq_set_other_modes_raw(SOM_TEXTURE_PERSP);
+	rdpq_change_other_modes_raw(SOM_SAMPLE_MASK, SOM_SAMPLE_BILINEAR);
+	rdpq_change_other_modes_raw(SOM_TF_MASK, SOM_TF0_RGB);
+	rdpq_mode_mipmap(MIPMAP_NONE, 0);
+	rdpq_mode_zbuf(false, false);
+	rdpq_mode_combiner(RDPQ_COMBINER_FLAT);
+	rdpq_mode_blender(RDPQ_BLENDER((IN_RGB, IN_ALPHA, MEMORY_RGB, INV_MUX_ALPHA)));
+	rdpq_set_prim_color(RGBA32(0, 0x0, 0x0, 0xc0));
+	for (int i = 0; i < game_state.spooker_count; i++) {
+		spooker_state_t *spooker = &game_state.spookers[i];
+		if (spooker->knockback_timer < SPOOKER_KNOCKBACK_THRESHOLD && spooker->knockback_timer % 4 >= 2) continue;
+		render_object_transformed_shaded(&spooker->transform, &spooker_model);
+	}
+
+
+	// Render spookers
+	rdpq_mode_zbuf(true, true);
+	rdpq_mode_combiner(RDPQ_COMBINER_TEX_SHADE);
+	rdpq_mode_blender(RDPQ_BLENDER((IN_RGB, IN_ALPHA, IN_RGB, INV_MUX_ALPHA)));
+	rdpq_sync_load();
+	rdp_load_texture(0, 0, MIRROR_DISABLED, spooker_sprite);
+	for (int i = 0; i < game_state.spooker_count; i++) {
+		spooker_state_t *spooker = &game_state.spookers[i];
+		if (spooker->knockback_timer < SPOOKER_KNOCKBACK_THRESHOLD && spooker->knockback_timer % 4 >= 2) continue;
+		render_object_transformed_shaded(&spooker->transform, &spooker_model);
+	}
+
+	// Render snoopers
 	rdpq_sync_load();
 	rdp_load_texture(0, 0, MIRROR_DISABLED, snooper_sprite);
 	for (int i = 0; i < game_state.snooper_count; i++) {
-		if (!should_render(game_state.snoopers[i].position.x, game_state.snoopers[i].position.y)) continue;
+		snooper_state_t *snooper = &game_state.snoopers[i];
+		if (!should_render(snooper->position.x, snooper->position.y)) continue;
 
-		work_transform.position.x = game_state.snoopers[i].position.x;
-		work_transform.position.y = game_state.snoopers[i].position.y;
-		work_transform.rotation_z = game_state.snoopers[i].head_rotation_z;
-		// render_model_positioned(&work_transform.position, &snooper_model);
+		work_transform.position.x = snooper->position.x;
+		work_transform.position.y = snooper->position.y;
+		work_transform.rotation_z = snooper->head_rotation_z;
+
+		if (snooper->status == SNOOPER_STATUS_DYING) {
+			float progress = snooper->freeze_timer / (float)SNOOPER_DIE_DURATION;
+			work_transform.position.z = -10.f * progress * progress;
+		} else {
+			work_transform.position.z = 0.f;
+		}
+
 		render_object_transformed_shaded(&work_transform, &snooper_model);
 	}
 
-	// Render spookers
-	// rdpq_sync_load();
-	// rdp_load_texture(0, 0, MIRROR_DISABLED, spooker_sprite);
-	for (int i = 0; i < game_state.spooker_count; i++) {
-		// render_model_positioned(&game_state.spookers[i].transform.position, &snooper_model);
-		spooker_state_t *spooker = &game_state.spookers[i];
-		if (spooker->knockback_timer < SPOOKER_KNOCKBACK_THRESHOLD && spooker->knockback_timer % 4 >= 2) continue;
-		render_object_transformed_shaded(&spooker->transform, &snooper_model);
+	// Render score
+	rdpq_set_mode_standard();
+	rdpq_mode_combiner(RDPQ_COMBINER_TEX);
+	rdpq_mode_blender(RDPQ_BLENDER((IN_RGB, IN_ALPHA, MEMORY_RGB, INV_MUX_ALPHA)));
+	rdpq_sync_load();
+	rdp_load_texture(0, 0, MIRROR_DISABLED, numbers_sprite);
+
+	if (game_state.score >= 10) {
+		render_digit(SCORE_X, SCORE_Y, game_state.score / 10);
+	}
+
+	render_digit(SCORE_X+10, SCORE_Y, game_state.score % 10);
+
+	render_digit(SCORE_X+20, SCORE_Y, 10);
+
+	uint16_t score_target = game_state.level->score_target;
+	render_digit(SCORE_X+30, SCORE_Y, score_target / 10);
+	render_digit(SCORE_X+40, SCORE_Y, score_target % 10);
+
+	render_digit(SCORE_X+50, SCORE_Y, 14);
+	render_digit(SCORE_X+58, SCORE_Y, 15);
+
+	render_digit(DEATH_X, SCORE_Y, game_state.snooper_death_count);
+	render_digit(DEATH_X+10, SCORE_Y, 10);
+	render_digit(DEATH_X+20, SCORE_Y, game_state.level->snooper_death_cap);
+	render_digit(DEATH_X+30, SCORE_Y, 12);
+	render_digit(DEATH_X+38, SCORE_Y, 13);
+
+	if (game_state.result != GAME_RESULT_NONE) {
+		rdpq_mode_combiner(RDPQ_COMBINER_FLAT);
+		rdpq_set_prim_color(RGBA32(0xc0, 0xc0, 0xc0, 0x40));
+		rdpq_texture_rectangle(0, 35, 40, 30+250, 40+128, 0.f, 0.f, 1.f, 1.f);
+
+		rdpq_mode_combiner(RDPQ_COMBINER_TEX);
+		sprite_t *sprite = game_state.result == GAME_RESULT_WIN ? win_sprite : lose_sprite;
+
+		for (uint32_t y = 0; y < sprite->vslices; y++)
+		{
+			for (uint32_t x = 0; x < sprite->hslices; x++)
+			{
+				rdp_load_texture_stride(0, 0, MIRROR_DISABLED, sprite, y*sprite->hslices + x);
+				rdp_draw_sprite(0, 40 + x * (sprite->width / sprite->hslices), 40 + y * (sprite->height / sprite->vslices), MIRROR_DISABLED);
+			}
+		}
 	}
 
 	char info_str[64];
@@ -640,6 +769,7 @@ bool render() {
 	graphics_set_color(0xFFFFFFFF, 0x00000000);
 	graphics_draw_text(disp, 6, 2, info_str);
 
+	/*
 	{
 		const vector3_t *spooker_position = &game_state.spookers[0].transform.position;
 		sprintf(info_str, "%d %.1f %.1f %ld", closest_node, spooker_position->x, spooker_position->y, tri_count);
@@ -647,6 +777,7 @@ bool render() {
 
 	graphics_draw_text(disp, 60, 2, info_str);
 	graphics_draw_text(disp, 6, 10, debug_message);
+	*/
 
 	rdp_detach_show(disp);
 

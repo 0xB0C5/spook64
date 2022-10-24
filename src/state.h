@@ -8,6 +8,7 @@
 #define MAX_SNOOPER_COUNT 32
 #define MAX_SPOOKER_COUNT 4
 #define MAX_LEVEL_LIGHT_COUNT 32
+#define SNOOPER_DIE_DURATION 20
 
 #define SPOOKER_KNOCKBACK_THRESHOLD 30
 
@@ -15,7 +16,14 @@ typedef enum {
 	SNOOPER_STATUS_ALIVE=0,
 	SNOOPER_STATUS_SPOOKED=1,
 	SNOOPER_STATUS_DEAD=2,
+	SNOOPER_STATUS_DYING=3,
 } snooper_status_t;
+
+typedef enum {
+	GAME_RESULT_NONE=0,
+	GAME_RESULT_WIN=1,
+	GAME_RESULT_LOSE=2,
+} game_result_t;
 
 typedef struct {
 	vector2_t position;
@@ -61,14 +69,19 @@ typedef struct {
 
 	vector3_t camera_position;
 
-	uint32_t snooper_timer;
-	
+	uint16_t snooper_timer;
+
+	uint16_t score;
+	uint16_t snooper_death_count;
+
+	game_result_t result;
+
 	const level_t *level;
 } game_state_t;
 
 
 extern game_state_t game_state;
-void state_init(const level_t *level);
+void state_init();
 void state_update();
 
 #endif

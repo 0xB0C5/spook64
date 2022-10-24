@@ -1,22 +1,12 @@
-scoring
+
 spawn rate tuning
 
-more spooker sounds.
-
-More level geometry
-
-more levels
-level advancing
-
 Snooper model & animations
-Spooker model & animations
-
-
-Music
 
 Clip lights at walls
 light up walls
 
 Optimize Rendering?
 
-Menus
+more levels
+level advancing
