@@ -96,8 +96,6 @@ uint32_t rdp_load_texture_stride_hax( uint32_t texslot, uint32_t texloc, mirror_
     return __rdp_load_texture( texslot, texloc, mirror, sprite, buffer, sl, tl, sh, th );
 }
 
-
-
 void rdp_load_texture_hax(tex_format_t format, uint32_t hbits, uint32_t wbits, void *buff) {
 	uint32_t width = 1 << hbits;
 	uint32_t height = 1 << wbits;
@@ -122,17 +120,5 @@ void rdp_load_texture_hax(tex_format_t format, uint32_t hbits, uint32_t wbits, v
 
     rdpq_load_tile(0, 0, 0, width, height);
 }
-
-
-	// You can't tell me what to do!
-	/*
-#define _RDPQ_SOM_BLEND2A_A_MEMORY_RGB cast64(1)
-#define _RDPQ_SOM_BLEND2A_B2_ONE cast64(2)
-    rdpq_mode_blender(RDPQ_BLENDER2(
-        (MEMORY_RGB, IN_ALPHA, MEMORY_RGB, ONE),
-        (CYCLE1_RGB, IN_ALPHA, CYCLE1_RGB, ONE)
-    ));
-	*/
-
 
 #endif

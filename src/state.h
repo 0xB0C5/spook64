@@ -34,6 +34,8 @@ typedef struct {
 	uint16_t rotate_timer;
 	uint16_t freeze_timer;
 	uint16_t light_brightness;
+	uint16_t spooked_timer;
+	float animation_progress;
 	snooper_status_t status;
 } snooper_state_t;
 

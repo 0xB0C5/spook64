@@ -6,7 +6,6 @@
 #include "sprites.h"
 #include "debug.h"
 #include "libdragon_hax.h"
-#include "light.h"
 
 #include "path.h"
 
@@ -77,6 +76,53 @@ static uint32_t tri_count;
 
 static float half_framebuffer_width;
 static float half_framebuffer_height;
+
+static model_t *snooper_models[] = {
+	&snooper_000001_model,
+	&snooper_000002_model,
+	&snooper_000003_model,
+	&snooper_000004_model,
+	&snooper_000005_model,
+	&snooper_000006_model,
+	&snooper_000007_model,
+	&snooper_000008_model,
+	&snooper_000009_model,
+	&snooper_000010_model,
+	&snooper_000011_model,
+	&snooper_000012_model,
+	&snooper_000013_model,
+	&snooper_000014_model,
+	&snooper_000015_model,
+	&snooper_000016_model,
+	&snooper_000017_model,
+	&snooper_000018_model,
+	&snooper_000019_model,
+	&snooper_000020_model,
+};
+
+static model_t *snooper_feet_models[] = {
+	&snooper_000001_feet_model,
+	&snooper_000002_feet_model,
+	&snooper_000003_feet_model,
+	&snooper_000004_feet_model,
+	&snooper_000005_feet_model,
+	&snooper_000006_feet_model,
+	&snooper_000007_feet_model,
+	&snooper_000008_feet_model,
+	&snooper_000009_feet_model,
+	&snooper_000010_feet_model,
+	&snooper_000011_feet_model,
+	&snooper_000012_feet_model,
+	&snooper_000013_feet_model,
+	&snooper_000014_feet_model,
+	&snooper_000015_feet_model,
+	&snooper_000016_feet_model,
+	&snooper_000017_feet_model,
+	&snooper_000018_feet_model,
+	&snooper_000019_feet_model,
+	&snooper_000020_feet_model,
+};
+
 
 void update_framebuffer_size(surface_t *surf) {
 	half_framebuffer_width = surf->width / 2;
@@ -276,7 +322,6 @@ void render_object_transformed_shaded(const object_transform_t *transform, const
 		float norm_y = in_norms[i+1];
 		float norm_z = in_norms[i+2];
 
-		// TODO : a lot of this can be precalculated.
 		float brightness = (
 			  light_vec_x * norm_x
 			+ light_vec_y * norm_y
@@ -682,7 +727,6 @@ bool render() {
 		render_object_transformed_shaded(&spooker->transform, &spooker_model);
 	}
 
-
 	// Render spookers
 	rdpq_mode_zbuf(true, true);
 	rdpq_mode_combiner(RDPQ_COMBINER_TEX_SHADE);
@@ -709,11 +753,20 @@ bool render() {
 		if (snooper->status == SNOOPER_STATUS_DYING) {
 			float progress = snooper->freeze_timer / (float)SNOOPER_DIE_DURATION;
 			work_transform.position.z = -10.f * progress * progress;
+		} else if (snooper->status == SNOOPER_STATUS_SPOOKED) {
+			float t = snooper->spooked_timer / 8.f;
+			if (t > 1.0f) t = 1.0f;
+			work_transform.position.z = 4.f * t * (1.f - t);
 		} else {
 			work_transform.position.z = 0.f;
 		}
 
-		render_object_transformed_shaded(&work_transform, &snooper_model);
+		int animation_index = ARRAY_LENGTH(snooper_models) * snooper->animation_progress;
+		render_object_transformed_shaded(&work_transform, snooper_models[animation_index]);
+		work_transform.rotation_z = snooper->feet_rotation_z;
+		render_object_transformed_shaded(&work_transform, snooper_feet_models[animation_index]);
+
+		
 	}
 
 	// Render score

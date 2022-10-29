@@ -94,6 +94,8 @@ static void spawn_snooper() {
 		new_snooper->freeze_timer = 0;
 
 		new_snooper->light_brightness = 0;
+		new_snooper->animation_progress = 0.f;
+		new_snooper->spooked_timer = 0;
 	}
 }
 
@@ -227,8 +229,16 @@ void state_update() {
 		update_light_brightness(&snooper->light_brightness);
 
 		float speed = snooper->status == SNOOPER_STATUS_ALIVE ? SNOOPER_SPEED : -SNOOPER_RUN_SPEED;
+		float animation_speed = snooper->status == SNOOPER_STATUS_ALIVE ? 0.05f : 0.15f;
 		if (snooper->freeze_timer != 0) {
+			// TODO : animation?
 			speed *= 0.5f;
+			animation_speed *= 0.5f;
+		}
+
+		snooper->animation_progress += animation_speed;
+		if (snooper->animation_progress >= 1.f) {
+			snooper->animation_progress = 0.f;
 		}
 
 		bool end = path_follow(&snooper->path_follower, speed);
@@ -256,10 +266,13 @@ void state_update() {
 		snooper->position.y = smoothness * snooper->position.y + roughness * snooper->path_follower.position.y;
 
 		if (snooper->freeze_timer == 0) {
+			if (snooper->status == SNOOPER_STATUS_SPOOKED) {
+				snooper->spooked_timer++;
+			}
 			if (snooper->status == SNOOPER_STATUS_ALIVE) {
 				if (--snooper->rotate_timer == 0) {
-					snooper->rotate_timer = 30 + RANDN(90);
-					float target_rotation_z = snooper->feet_rotation_z + (M_PI/2.0f)*(randf()-0.5f);
+					snooper->rotate_timer = 20 + RANDN(60);
+					float target_rotation_z = snooper->feet_rotation_z + (M_PI/3.0f)*(randf()-0.5f);
 					if (target_rotation_z < -M_PI) {
 						target_rotation_z += 2.f*M_PI;
 					} else if (target_rotation_z > M_PI) {
@@ -415,6 +428,7 @@ void state_update() {
 			if (dist2 < SPOOK_DISTANCE*SPOOK_DISTANCE) {
 				game_state.snoopers[i].status = SNOOPER_STATUS_SPOOKED;
 				game_state.snoopers[i].freeze_timer = 5;
+				game_state.snoopers[i].spooked_timer = 0;
 			}
 		}
 		game_state.spookers[0].spook_timer = 15;

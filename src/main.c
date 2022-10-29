@@ -1,3 +1,4 @@
+
 #include "dragon.h"
 #include <malloc.h>
 #include "render.h"
@@ -54,7 +55,6 @@ int main()
 
 	// show_model_viewer(ARRAY_LENGTH(test_models), test_models, "rom:/test.sprite");
 
-	
 	const uint32_t ticks_per_frame = 1562500LL;
 	const uint32_t max_delay = 156250LL;
 
@@ -76,6 +76,7 @@ int main()
 		}
 
         if (render()) {
+			audio_update();
 			state_update();
 		} else {
 			debugf("skipped render!\n");
