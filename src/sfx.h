@@ -12,6 +12,7 @@ void sfx_bad();
 
 void sfx_start_music();
 void sfx_start_menu_music();
+void sfx_start_win_music();
 void sfx_stop_music();
 void sfx_set_music_volume(float volume);
 

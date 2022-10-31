@@ -3,7 +3,7 @@
 #include "sfx.h"
 
 void show_end_screen() {
-	sfx_start_music();
+	sfx_start_win_music();
 
 	load_screen("rom:/screen_beat.sprite");
 

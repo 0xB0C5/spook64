@@ -30,6 +30,7 @@ static wav64_t bad;
 
 static wav64_t music;
 static wav64_t menu_music;
+static wav64_t win_music;
 static wav64_t win;
 static wav64_t lose;
 static wav64_t level_start;
@@ -48,18 +49,14 @@ void sfx_init() {
 	wav64_open(&spooker_spook, "ah.wav64");
 	wav64_open(&spooker_spook_muffled, "ah_muffled.wav64");
 	wav64_open(&spooker_oof, "oof.wav64");
-
 	wav64_open(&point, "point.wav64");
-
 	wav64_open(&music, "spooky_swing.wav64");
-
 	wav64_open(&bad, "bad.wav64");
-
 	wav64_open(&win, "win.wav64");
 	wav64_open(&lose, "lose.wav64");
 	wav64_open(&level_start, "level_start.wav64");
-
 	wav64_open(&menu_music, "spooky_menu.wav64");
+	wav64_open(&win_music, "snooper_party.wav64");
 
 	sfx_channel_index = 0;
 
@@ -68,6 +65,7 @@ void sfx_init() {
 
 	music.wave.loop_len = 1148411L;
 	menu_music.wave.loop_len = 512000L;
+	win_music.wave.loop_len = 640000L;
 }
 
 static void sfx_play_randfreq(wav64_t *w) {
@@ -153,6 +151,11 @@ void sfx_start_music() {
 
 void sfx_start_menu_music() {
 	mixer_ch_play(16, &menu_music.wave);
+	mixer_ch_set_vol(16, 0.25f, 0.25f);
+}
+
+void sfx_start_win_music() {
+	mixer_ch_play(16, &win_music.wave);
 	mixer_ch_set_vol(16, 0.25f, 0.25f);
 }
 
