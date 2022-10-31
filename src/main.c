@@ -7,18 +7,12 @@
 #include "model_viewer.h"
 #include "state.h"
 #include "sfx.h"
+#include "instructions.h"
+#include "end_screen.h"
 
 model_t *test_models[] = {
 	&floor_model,
 };
-
-void audio_update() {
-	if (audio_can_write()) {    	
-		short *buf = audio_write_begin();
-		mixer_poll(buf, audio_get_buffer_length());
-		audio_write_end();
-	}
-}
 
 int main()
 {
@@ -32,11 +26,9 @@ int main()
     dfs_init(DFS_DEFAULT_LOCATION);
 
     audio_init(44100, 4);
-    mixer_init(32);
+    mixer_init(17);
 
     rdp_init();
-	// TODO : rdpq debug is slowing things to a crawl.
-	// investigate wtf I'm doing wrong!
     rdpq_debug_start();
 
 	// TODO : for some reason it's generating underflow exceptions despite C1_FCR31_FS being set?
@@ -51,16 +43,18 @@ int main()
 
 	renderer_init();
 	sfx_init();
-	state_init();
 
-	// show_model_viewer(ARRAY_LENGTH(test_models), test_models, "rom:/test.sprite");
+	show_instructions();
+
+	state_init();
 
 	const uint32_t ticks_per_frame = 1562500LL;
 	const uint32_t max_delay = 156250LL;
 
 	uint32_t last_update = (uint32_t)timer_ticks();
+	uint32_t extra_ticks = 0;
 
-    while (1)
+    while (game_state.status != GAME_STATUS_BEAT)
     {
 		// Wait for next frame.
 		uint32_t now;
@@ -71,15 +65,21 @@ int main()
 
 		last_update += ticks_per_frame;
 		if (now - last_update > max_delay) {
+			extra_ticks += now - last_update;
 			// Slowdown!
 			last_update = now;
 		}
 
-        if (render()) {
+		render();
+		audio_update();
+		state_update();
+		// Update the state at 30fps regardless of graphics framerate.
+		while (extra_ticks >= ticks_per_frame) {
+			extra_ticks -= ticks_per_frame;
 			audio_update();
 			state_update();
-		} else {
-			debugf("skipped render!\n");
 		}
     }
+
+	show_end_screen();
 }

@@ -38,6 +38,8 @@ void renderer_init();
 void clear_z_buffer();
 void render_object_transformed_shaded(const object_transform_t *transform, const model_t *model);
 void set_camera_pitch(float camera_pitch);
+void load_screen(const char *path);
+bool render_screen(float alpha);
 
 extern surface_t zbuffer;
 extern float camera_position[];

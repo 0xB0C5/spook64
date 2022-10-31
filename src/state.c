@@ -28,9 +28,21 @@
 #define CAMERA_BOUNDS_MAX_Y 6.f
 #define CAMERA_BOUNDS_MIN_Y 4.f
 
+#define LIGHT_HMOVE_VELOCITY 0.2f
+#define LIGHT_HMOVE_ACCEL 0.02f
+#define LIGHT_HMOVE_MARGIN 4.f
+
 game_state_t game_state;
 
-void load_level(const level_t *level) {
+void load_level(uint16_t level_index) {
+	game_state.level_index = level_index;
+	game_state.level = levels[level_index];
+	
+	if (game_state.level == NULL) {
+		game_state.status = GAME_STATUS_BEAT;
+		return;
+	}
+
 	game_state.spooker_count = 1;
 	game_state.spookers[0].transform.position.x = 0.f;
 	game_state.spookers[0].transform.position.y = 0.f;
@@ -51,13 +63,14 @@ void load_level(const level_t *level) {
 	game_state.score = 0;
 	game_state.snooper_death_count = 0;
 
-	game_state.level = level;
+	game_state.status = GAME_STATUS_START;
+	game_state.game_status_timer = 0;
 
-	game_state.result = GAME_RESULT_NONE;
-
-	path_set_graph(level->path_graph);
+	path_set_graph(game_state.level->path_graph);
 
 	for (int i = 0; i < game_state.level->light_count; i++) {
+		game_state.light_states[i].position = game_state.level->lights[i].position;
+
 		switch (game_state.level->lights[i].type) {
 			case LIGHT_TYPE_STATIC:
 				game_state.light_states[i].brightness = 90;
@@ -68,14 +81,18 @@ void load_level(const level_t *level) {
 				game_state.light_states[i].is_on = 0;
 				game_state.light_states[i].type_state.blink.timer = 240 + RANDN(240);
 				break;
+			case LIGHT_TYPE_HMOVE:
+				game_state.light_states[i].brightness = 90;
+				game_state.light_states[i].is_on = 1;
+				game_state.light_states[i].type_state.hmove.velocity_x = 0.f;
 		}
 	}
 
-	sfx_start_music();
+	sfx_level_start();
 }
 
 void state_init() {
-	load_level(&level0);
+	load_level(0);
 }
 
 static void spawn_snooper() {
@@ -96,10 +113,34 @@ static void spawn_snooper() {
 		new_snooper->light_brightness = 0;
 		new_snooper->animation_progress = 0.f;
 		new_snooper->spooked_timer = 0;
+
+		int min_duration = game_state.level->min_snooper_spawn_duration;
+		int max_duration = game_state.level->max_snooper_spawn_duration;
+		game_state.snooper_timer = min_duration + RANDN(max_duration - min_duration);
 	}
 }
 
+static inline float world2grid_x(float x) {
+	return 0.5f*(x + game_state.level->width);
+}
+static inline float world2grid_y(float y) {
+	return 0.5f*(-y + game_state.level->height);
+}
+
+bool is_wall(float x, float y) {
+	int grid_x = (int)world2grid_x(x);
+	int grid_y = (int)world2grid_y(y);
+
+	if (grid_x < 0 || grid_x >= game_state.level->width) return true;
+	if (grid_y < 0 || grid_y >= game_state.level->height) return true;
+
+	return game_state.level->data[game_state.level->width*grid_y + grid_x] != 1;
+}
+
 static size_t get_light_at(float x, float y, vector2_t *out) {
+	// If we're inside a wall, there's no light.
+	if (is_wall(x, y)) return MAX_SNOOPER_COUNT+1;
+
 	for (size_t i = 0; i < game_state.snooper_count; i++) {
 		snooper_state_t *snooper = game_state.snoopers + i;
 		if (snooper->status != SNOOPER_STATUS_ALIVE) {
@@ -128,12 +169,13 @@ static size_t get_light_at(float x, float y, vector2_t *out) {
 	}
 
 	for (size_t i = 0; i < game_state.level->light_count; i++) {
-		if (!game_state.light_states[i].is_on) continue;
+		const level_light_state_t *light_state = &game_state.light_states[i];
+		if (!light_state->is_on) continue;
 
 		const level_light_t *light = &game_state.level->lights[i];
 
-		float dx = x - light->position.x;
-		float dy = y - light->position.y;
+		float dx = x - light_state->position.x;
+		float dy = y - light_state->position.y;
 
 		float dist2 = dx*dx + dy*dy;
 		float hit_radius = 0.8f * light->radius;
@@ -182,32 +224,57 @@ void update_light_brightness(uint16_t *brightness) {
 }
 
 void state_update() {
+	if (game_state.status == GAME_STATUS_BEAT) {
+		return;
+	}
+
 	controller_scan();
 	struct controller_data ckeys = get_keys_held();
 
-	if (game_state.result != GAME_RESULT_NONE) {
-		if (ckeys.c[0].start) {
-			load_level(game_state.level);
+	// Update status timer.
+	if (game_state.status == GAME_STATUS_LOSE || game_state.status == GAME_STATUS_WIN) {
+		if (ckeys.c[0].start || game_state.game_status_timer > 0) {
+			game_state.game_status_timer++;
+			if (game_state.game_status_timer >= GAME_END_DURATION) {
+				uint16_t level_index = game_state.level_index;
+				if (game_state.status == GAME_STATUS_WIN) level_index++;
+				load_level(level_index);
+				return;
+			}
 		}
+	} else {		
+		if (game_state.game_status_timer < 0xffff) {
+			game_state.game_status_timer++;
+		}
+	}
+
+	if (game_state.status == GAME_STATUS_START && game_state.game_status_timer >= GAME_START_DURATION) {
+		game_state.status = GAME_STATUS_PLAYING;
+		game_state.game_status_timer = 0;
+		sfx_start_music();
+		return;
+	}
+
+	if (game_state.status != GAME_STATUS_PLAYING) {
 		return;
 	}
 
 	if (game_state.score >= game_state.level->score_target) {
-		game_state.result = GAME_RESULT_WIN;
+		game_state.status = GAME_STATUS_WIN;
+		game_state.game_status_timer = 0;
 		sfx_win();
 		return;
 	}
 	if (game_state.snooper_death_count >= game_state.level->snooper_death_cap) {
-		game_state.result = GAME_RESULT_LOSE;
+		game_state.status = GAME_STATUS_LOSE;
+		game_state.game_status_timer = 0;
 		sfx_lose();
 		return;
 	}
 
 	// Spawn snooper?
-	game_state.snooper_timer--;
+	if (game_state.snooper_timer > 0) game_state.snooper_timer--;
 	if (game_state.snooper_count == 0 || game_state.snooper_timer == 0) {
-		game_state.snooper_timer = 120;
-
 		spawn_snooper();
 	}
 
@@ -354,8 +421,8 @@ void state_update() {
 			float dx;
 			float dy;
 			if (spooker->spook_timer == 0) {
-				dx =  SPOOKER_SPEED * ckeys.c[0].x;
-				dy =  SPOOKER_SPEED * ckeys.c[0].y;
+				dx = SPOOKER_SPEED * ckeys.c[0].x / 64.f;
+				dy = SPOOKER_SPEED * ckeys.c[0].y / 64.f;
 
 				float speed2 = dx*dx + dy*dy;
 				if (speed2 > SPOOKER_SPEED*SPOOKER_SPEED) {
@@ -416,19 +483,23 @@ void state_update() {
 		spooker->transform.position.z = 0.5f * spooker->transform.position.z + 0.5f * spook_height;
 	}
 
-	if (ckeys.c[0].A && game_state.spookers[0].spook_timer == 0 && game_state.spookers[0].knockback_timer == 0) {
-		sfx_spooker_spook();
-		for (uint16_t i = 0; i < game_state.snooper_count; i++) {
-			if (game_state.snoopers[i].status != SNOOPER_STATUS_ALIVE) {
-				continue;
-			}
-			float dx = game_state.snoopers[i].position.x - game_state.spookers[0].transform.position.x;
-			float dy = game_state.snoopers[i].position.y - game_state.spookers[0].transform.position.y;
-			float dist2 = dx*dx + dy*dy;
-			if (dist2 < SPOOK_DISTANCE*SPOOK_DISTANCE) {
-				game_state.snoopers[i].status = SNOOPER_STATUS_SPOOKED;
-				game_state.snoopers[i].freeze_timer = 5;
-				game_state.snoopers[i].spooked_timer = 0;
+	if (ckeys.c[0].Z && game_state.spookers[0].spook_timer == 0 && game_state.spookers[0].knockback_timer == 0) {
+		if (is_wall(game_state.spookers[0].transform.position.x, game_state.spookers[0].transform.position.y)) {
+			sfx_spooker_spook_muffled();
+		} else {
+			sfx_spooker_spook();
+			for (uint16_t i = 0; i < game_state.snooper_count; i++) {
+				if (game_state.snoopers[i].status != SNOOPER_STATUS_ALIVE) {
+					continue;
+				}
+				float dx = game_state.snoopers[i].position.x - game_state.spookers[0].transform.position.x;
+				float dy = game_state.snoopers[i].position.y - game_state.spookers[0].transform.position.y;
+				float dist2 = dx*dx + dy*dy;
+				if (dist2 < SPOOK_DISTANCE*SPOOK_DISTANCE) {
+					game_state.snoopers[i].status = SNOOPER_STATUS_SPOOKED;
+					game_state.snoopers[i].freeze_timer = 5;
+					game_state.snoopers[i].spooked_timer = 0;
+				}
 			}
 		}
 		game_state.spookers[0].spook_timer = 15;
@@ -503,6 +574,28 @@ void state_update() {
 						}
 					}
 				}
+				break;
+			case LIGHT_TYPE_HMOVE:
+				update_light_brightness(&light_state->brightness);
+				light_state->position.x += light_state->type_state.hmove.velocity_x;
+
+				bool right = light_state->type_state.hmove.velocity_x >= 0.f;
+				float max_x = game_state.level->width - LIGHT_HMOVE_MARGIN;
+				if (light_state->position.x >= max_x) right = false;
+				if (light_state->position.x <= -max_x) right = true;
+
+				if (right) {
+					light_state->type_state.hmove.velocity_x += LIGHT_HMOVE_ACCEL;
+					if (light_state->type_state.hmove.velocity_x > LIGHT_HMOVE_VELOCITY) {
+						light_state->type_state.hmove.velocity_x = LIGHT_HMOVE_VELOCITY;
+					}
+				} else {
+					light_state->type_state.hmove.velocity_x -= LIGHT_HMOVE_ACCEL;
+					if (light_state->type_state.hmove.velocity_x < -LIGHT_HMOVE_VELOCITY) {
+						light_state->type_state.hmove.velocity_x = -LIGHT_HMOVE_VELOCITY;
+					}
+				}
+
 				break;
 		}
 	}

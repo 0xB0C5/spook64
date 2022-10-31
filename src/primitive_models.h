@@ -1,5 +1,6 @@
 extern model_t floor_model;
 extern model_t wall_model;
+extern model_t fall_model;
 extern model_t wall_left_model;
 extern model_t wall_right_model;
 extern model_t roof_model;

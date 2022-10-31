@@ -39,6 +39,12 @@ filesystem/numbers.sprite: MKSPRITE_FLAGS=--format RGBA16 --tiles 64,32
 filesystem/win.sprite: MKSPRITE_FLAGS=--format RGBA16 --tiles 32,32
 filesystem/lose.sprite: MKSPRITE_FLAGS=--format RGBA16 --tiles 32,32
 
+filesystem/screen0_snooper.sprite: MKSPRITE_FLAGS=--format RGBA16 --tiles 64,16
+filesystem/screen1_spooker.sprite: MKSPRITE_FLAGS=--format RGBA16 --tiles 64,16
+filesystem/screen2_light.sprite: MKSPRITE_FLAGS=--format RGBA16 --tiles 64,16
+filesystem/screen3_controls.sprite: MKSPRITE_FLAGS=--format RGBA16 --tiles 64,16
+filesystem/screen_beat.sprite: MKSPRITE_FLAGS=--format RGBA16 --tiles 64,16
+
 filesystem/light.sprite: MKSPRITE_FLAGS=--format IA8 --tiles 32,64
 filesystem/level_light.sprite: MKSPRITE_FLAGS=--format IA8 --tiles 64,64
 

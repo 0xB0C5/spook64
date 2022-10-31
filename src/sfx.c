@@ -21,6 +21,7 @@ static wav64_t snooper_deaths[SNOOPER_DEATH_COUNT];
 static wav64_t snooper_speaks[SNOOPER_SPEAK_COUNT];
 
 static wav64_t spooker_spook;
+static wav64_t spooker_spook_muffled;
 
 static wav64_t spooker_oof;
 
@@ -28,8 +29,10 @@ static wav64_t point;
 static wav64_t bad;
 
 static wav64_t music;
+static wav64_t menu_music;
 static wav64_t win;
 static wav64_t lose;
+static wav64_t level_start;
 
 void sfx_init() {
     wav64_open(snooper_screams+0, "scream2.wav64");
@@ -43,6 +46,7 @@ void sfx_init() {
     wav64_open(snooper_speaks+2, "speak2.wav64");
 
 	wav64_open(&spooker_spook, "ah.wav64");
+	wav64_open(&spooker_spook_muffled, "ah_muffled.wav64");
 	wav64_open(&spooker_oof, "oof.wav64");
 
 	wav64_open(&point, "point.wav64");
@@ -53,13 +57,17 @@ void sfx_init() {
 
 	wav64_open(&win, "win.wav64");
 	wav64_open(&lose, "lose.wav64");
+	wav64_open(&level_start, "level_start.wav64");
+
+	wav64_open(&menu_music, "spooky_menu.wav64");
 
 	sfx_channel_index = 0;
 
 	point_freq = 16000.f;
 	point_lo_vol = 0.f;
 
-	music.wave.loop_len = 1148411;
+	music.wave.loop_len = 1148411L;
+	menu_music.wave.loop_len = 512000L;
 }
 
 static void sfx_play_randfreq(wav64_t *w) {
@@ -94,6 +102,10 @@ void sfx_snooper_die() {
 
 void sfx_spooker_spook() {
 	sfx_play_randfreq(&spooker_spook);
+}
+
+void sfx_spooker_spook_muffled() {
+	sfx_play_randfreq(&spooker_spook_muffled);
 }
 
 void sfx_spooker_oof() {
@@ -139,8 +151,18 @@ void sfx_start_music() {
 	mixer_ch_set_vol(16, 0.25f, 0.25f);
 }
 
+void sfx_start_menu_music() {
+	mixer_ch_play(16, &menu_music.wave);
+	mixer_ch_set_vol(16, 0.25f, 0.25f);
+}
+
 void sfx_stop_music() {
 	mixer_ch_stop(16);
+}
+
+void sfx_set_music_volume(float volume) {
+	volume *= 0.25f;
+	mixer_ch_set_vol(16, volume, volume);
 }
 
 void sfx_win() {
@@ -152,3 +174,17 @@ void sfx_lose() {
 	mixer_ch_play(16, &lose.wave);
 	mixer_ch_set_vol(16, 0.25f, 0.25f);
 }
+
+void sfx_level_start() {
+	mixer_ch_play(16, &level_start.wave);
+	mixer_ch_set_vol(16, 0.25f, 0.25f);
+}
+
+void audio_update() {
+	if (audio_can_write()) {    	
+		short *buf = audio_write_begin();
+		mixer_poll(buf, audio_get_buffer_length());
+		audio_write_end();
+	}
+}
+

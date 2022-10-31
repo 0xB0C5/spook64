@@ -53,6 +53,15 @@ static uint16_t wall_tris[] = {
 model_t wall_model = MODEL(wall_positions, wall_texcoords, wall_norms, wall_tris);
 
 
+static float fall_positions[] = {
+	-1.f, 1.f, -6.0f,
+	1.f, 1.f, -6.0f,
+	-1.f, 1.f, 0.0f,
+	1.f, 1.f, 0.0f,
+};
+
+model_t fall_model = MODEL(fall_positions, wall_texcoords, wall_norms, wall_tris);
+
 static float wall_left_positions[] = {
 	-1.f, 1.f, 0.0f,
 	-1.f, -1.f, 0.0f,
