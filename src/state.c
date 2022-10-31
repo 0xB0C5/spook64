@@ -219,8 +219,8 @@ void update_light_brightness(uint16_t *brightness) {
 		*brightness += RANDN(20);
 	} else {
 		*brightness += RANDN(5) - 2;
-		if (*brightness > 100) *brightness = 100;
 	}
+	if (*brightness > 100) *brightness = 100;
 }
 
 void state_update() {

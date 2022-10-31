@@ -692,6 +692,7 @@ bool render() {
 	rdpq_sync_load();
 	// rdp_load_texture(0, 0, MIRROR_DISABLED, snooper_light_sprite);
 	rdp_load_texture_stride_hax(0, 0, MIRROR_DISABLED, snooper_light_sprite, snooper_light_sprite->data, 0);
+
 	for (int i = 0; i < game_state.snooper_count; i++) {
 		snooper_state_t *snooper = &game_state.snoopers[i];
 		if (snooper->status != SNOOPER_STATUS_ALIVE) continue;
@@ -752,6 +753,10 @@ bool render() {
 		rdpq_set_prim_color(RGBA32(0xff, 0xff, 0xff, game_state.light_states[i].brightness*255/100));
 		render_model_positioned(&work_transform.position, &level_light_model);
 	}
+
+	// There's some glitchy stuff going on with the lights and I'm not sure why
+	// but maybe this will help???
+	rspq_wait();
 
     rdp_attach(disp);
 	update_framebuffer_size(disp);
