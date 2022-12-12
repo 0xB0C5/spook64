@@ -275,17 +275,7 @@ void render_model_positioned(const vector3_t *position, const model_t *model) {
 		tri_vector_b[5] = 1.f / tri_vector_b[2];
 		tri_vector_c[5] = 1.f / tri_vector_c[2];
 
-		rdpq_triangle(
-			TILE0, // tile
-			0, // mipmaps
-			0, // pos_offset
-			-1, // shade_offset
-			3, // tex_offset
-			2, // depth_offset
-			tri_vector_a,
-			tri_vector_b,
-			tri_vector_c
-		);
+		rdpq_triangle(&TRIFMT_ZBUF_TEX, tri_vector_a, tri_vector_b, tri_vector_c);
 		tri_count++;
 	}
 }
@@ -354,6 +344,11 @@ void render_object_transformed_shaded(const object_transform_t *transform, const
 		work_colors[i+2] = ambient_light_b + brightness * directional_light_b;
 	}
 
+	static const rdpq_trifmt_t trifmt = (rdpq_trifmt_t){
+		.pos_offset = 0, .shade_offset = 6, .tex_offset = 3, .z_offset = 2,
+		.tex_tile = TILE0,
+	};
+
 	float *in_texcoords = model->texcoords;
 	uint16_t *in_tris = model->tris;
 	for (uint16_t i = 0; i < model->tris_len; i += 9) {
@@ -383,17 +378,7 @@ void render_object_transformed_shaded(const object_transform_t *transform, const
 		tri_vector_b[5] = 1.f / tri_vector_b[2];
 		tri_vector_c[5] = 1.f / tri_vector_c[2];
 
-		rdpq_triangle(
-			TILE0, // tile
-			0, // mipmaps
-			0, // pos_offset
-			6, // shade_offset
-			3, // tex_offset
-			2, // depth_offset
-			tri_vector_a,
-			tri_vector_b,
-			tri_vector_c
-		);
+		rdpq_triangle(&trifmt, tri_vector_a, tri_vector_b, tri_vector_c);
 		tri_count++;
 	}
 }

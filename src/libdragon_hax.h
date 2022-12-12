@@ -1,8 +1,6 @@
 #ifndef SPOOK64_LIBDRAGON_HAX
 #define SPOOK64_LIBDRAGON_HAX
 
-extern void rdpq_triangle_cpu(rdpq_tile_t tile, uint8_t mipmaps, int32_t pos_offset, int32_t shade_offset, int32_t tex_offset, int32_t z_offset, const float *v1, const float *v2, const float *v3);
-
 static inline uint32_t __rdp_round_to_power( uint32_t number )
 {
     if( number <= 4   ) { return 4;   }
